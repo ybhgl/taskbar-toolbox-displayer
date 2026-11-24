@@ -190,12 +190,15 @@ void SettingsSections::syncResourceMetricsRow(bool enabled, bool appBarEnabled) 
     };
     std::wstring summary;
     int selectedCount = 0;
-    for (int i = 0; i < kDockResourceMetricCount; ++i) {
-        if (!checked[i])
+    const DockResourceOrder order = isValidDockResourceOrder(state.dockResourceOrder)
+                                         ? state.dockResourceOrder
+                                         : defaultDockResourceOrder();
+    for (int metric : order) {
+        if (!checked[metric])
             continue;
         if (!summary.empty())
             summary += L"、";
-        summary += kShortNames[i];
+        summary += kShortNames[metric];
         ++selectedCount;
     }
     row->controlText =
@@ -204,7 +207,8 @@ void SettingsSections::syncResourceMetricsRow(bool enabled, bool appBarEnabled) 
                std::to_wstring(kDockResourceMetricCount) + L" 项")
             : L"选择监控项…";
     if (selectedCount > 0) {
-        row->hint = L"已选 " + std::to_wstring(selectedCount) + L" 项：" + summary;
+        row->hint = L"已选 " + std::to_wstring(selectedCount) + L" 项：" + summary +
+                    L"；点击按钮可勾选并调整顺序";
     } else if (enabled) {
         row->hint =
             appBarEnabled

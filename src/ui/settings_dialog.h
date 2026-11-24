@@ -63,6 +63,7 @@ struct SettingsState {
     bool dockResourceDownload = true;
     bool dockResourceUpload = true;
     bool dockResourceCpuFrequency = false;
+    DockResourceOrder dockResourceOrder = defaultDockResourceOrder();
     bool spectrumOn = false;
     int spectrumStyle = 0; // 默认、柱状图、梦幻波浪、分段电平、底缘频谱带
     COLORREF spectrumColor = RGB(49, 194, 124);
@@ -172,6 +173,7 @@ struct SettingsActions {
     std::function<void(bool)> onDockResourceDownload;
     std::function<void(bool)> onDockResourceUpload;
     std::function<void(bool)> onDockResourceCpuFrequency;
+    std::function<void(int, int)> onDockResourceReorder;
     std::function<void(bool)> onSpectrum;
     std::function<void(int)> onSpectrumStyle;
     std::function<void(int)> onSpectrumColorMode; // 0 已播放色 1 专辑主题色 2 自定义色

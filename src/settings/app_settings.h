@@ -30,6 +30,7 @@ struct MonitorTaskbarSettings {
     bool dockResourceSmallFont = false;
     bool dockResourceHideLabels = false;
     ResourcePlacement dockResourcePlacement = ResourcePlacement::End;
+    DockResourceOrder dockResourceOrder = defaultDockResourceOrder();
 
     constexpr bool hasAnyResourceMetric() const noexcept {
         return dockResourceCpuUsage || dockResourceMemoryUsage || dockResourceDownload ||
@@ -100,6 +101,7 @@ struct AppSettings {
     bool dockResourceSmallFont_ = false; // 性能监测小字模式
     bool dockResourceHideLabels_ = false; // 性能监测隐藏标签，仅翻页或悬停时短暂提示
     ResourcePlacement dockResourcePlacement_ = ResourcePlacement::End; // 仅内嵌模式生效
+    DockResourceOrder dockResourceOrder_ = defaultDockResourceOrder(); // 指标显示顺序
     bool taskbarContextMenuEnabled_ = true;
     bool hoverPlaybackControls_ = true;
     HoverControlStyle hoverControlStyle_ = HoverControlStyle::Inline;

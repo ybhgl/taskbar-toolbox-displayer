@@ -437,6 +437,22 @@ void App::applyDockResourcePlacement(int placement) {
     saveSettings();
 }
 
+void App::applyDockResourceReorder(int metric, int operation) {
+    if (metric < 0 || metric >= static_cast<int>(kDockResourceMetricCount) || operation < 0 ||
+        operation > static_cast<int>(DockResourceReorder::MoveLast))
+        return;
+    const auto displays = enumerateTaskbarDisplays();
+    const std::wstring targetId = resolveEditingMonitorDeviceName(displays);
+    const auto current = monitorSettingsForDevice(targetId);
+    const DockResourceOrder next = reorderedDockResourceOrder(
+        current.dockResourceOrder, metric, static_cast<DockResourceReorder>(operation));
+    updateMonitorSettings(targetId,
+                          [next](MonitorTaskbarSettings& profile) { profile.dockResourceOrder = next; });
+    applyDockResourceVisibility();
+    logSettingInt(L"dock-resource-reorder", metric * 4 + operation);
+    saveSettings();
+}
+
 bool App::isRenderMode(RenderMode mode) const { return renderMode_ == static_cast<int>(mode); }
 
 bool App::isMinimalRenderMode() const { return isRenderMode(RenderMode::Minimal); }
@@ -1503,6 +1519,7 @@ SettingsState App::currentSettingsState() const {
     st.dockResourceHideLabels = editingProfile.dockResourceHideLabels;
     st.dockResourcePlacement =
         editingProfile.dockResourcePlacement == ResourcePlacement::Start ? 0 : 1;
+    st.dockResourceOrder = editingProfile.dockResourceOrder;
     st.songInfoVisible = view.songInfoVisible;
     st.albumCoverVisible = settings_.albumCoverVisible_;
     st.platformIconVisible = settings_.platformIconVisible_;
@@ -1648,6 +1665,9 @@ SettingsActions App::buildSettingsActions() {
     act.onDockResourceSmallFont = [this](bool on) { applyDockResourceSmallFont(on); };
     act.onDockResourceHideLabels = [this](bool on) { applyDockResourceHideLabels(on); };
     act.onDockResourcePlacement = [this](int placement) { applyDockResourcePlacement(placement); };
+    act.onDockResourceReorder = [this](int metric, int operation) {
+        applyDockResourceReorder(metric, operation);
+    };
     act.onSpectrum = [this](bool on) { applySpectrumOn(on); };
     act.onSpectrumStyle = [this](int style) { applySpectrumStyle(style); };
     act.onSpectrumColorMode = [this](int mode) { applySpectrumColorMode(mode); };

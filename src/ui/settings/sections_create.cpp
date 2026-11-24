@@ -146,7 +146,7 @@ void SettingsSections::createTaskbarModeRows() {
     addHeader(kTaskbarModePage, L"资源监视");
     Row& embeddedResources = addRow(
         kTaskbarModePage, kIdEmbeddedResourceMonitor, ControlKind::Toggle, L"内嵌模式显示资源监视",
-        L"仅内嵌模式生效。按下方已勾选的监控项顺序显示，多页可用滚轮切换。",
+        L"仅内嵌模式生效。显示顺序可在“显示监控项”菜单中调整，多页可用滚轮切换。",
         40.0f, kRowTallH);
     embeddedResources.checked = state.embeddedResourceMonitor;
     embeddedResources.enabled = monitorActive && state.taskbarViewMode == 0;

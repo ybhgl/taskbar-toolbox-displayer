@@ -1,6 +1,10 @@
 #pragma once
 #include <windows.h>
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <utility>
 
 // 设置与显示共同使用的值类型，不依赖窗口或渲染器。
 inline constexpr wchar_t kDefaultUiFontFamily[] = L"Noto Sans SC";
@@ -125,7 +129,64 @@ enum class ResourcePlacement {
     End,
 };
 
-// 复用 Dock 资源区；所有监控项均可独立开关，按启用顺序紧凑排列。
+// 资源监视项标识与显示顺序。数组保存的是标识排列，而非各指标的开关状态。
+enum class DockResourceMetric : int {
+    Cpu = 0,
+    Memory = 1,
+    Upload = 2,
+    Download = 3,
+    Gpu = 4,
+    CpuFrequency = 5,
+};
+inline constexpr size_t kDockResourceMetricCount = 6;
+using DockResourceOrder = std::array<int, kDockResourceMetricCount>;
+
+inline DockResourceOrder defaultDockResourceOrder() { return {0, 1, 2, 3, 4, 5}; }
+
+inline bool isValidDockResourceOrder(const DockResourceOrder& order) {
+    std::array<bool, kDockResourceMetricCount> seen{};
+    for (int metric : order) {
+        if (metric < 0 || metric >= static_cast<int>(kDockResourceMetricCount) ||
+            seen[static_cast<size_t>(metric)])
+            return false;
+        seen[static_cast<size_t>(metric)] = true;
+    }
+    return true;
+}
+
+enum class DockResourceReorder { MoveUp = 0, MoveDown = 1, MoveFirst = 2, MoveLast = 3 };
+
+inline DockResourceOrder reorderedDockResourceOrder(const DockResourceOrder& order, int metric,
+                                                    DockResourceReorder operation) {
+    DockResourceOrder next = order;
+    if (!isValidDockResourceOrder(next) || metric < 0 ||
+        metric >= static_cast<int>(kDockResourceMetricCount))
+        return defaultDockResourceOrder();
+    const auto found = std::find(next.begin(), next.end(), metric);
+    const size_t current = static_cast<size_t>(found - next.begin());
+    if (found == next.end())
+        return next;
+
+    switch (operation) {
+    case DockResourceReorder::MoveUp:
+        if (current > 0)
+            std::swap(next[current], next[current - 1]);
+        break;
+    case DockResourceReorder::MoveDown:
+        if (current + 1 < next.size())
+            std::swap(next[current], next[current + 1]);
+        break;
+    case DockResourceReorder::MoveFirst:
+        std::rotate(next.begin(), next.begin() + current, next.begin() + current + 1);
+        break;
+    case DockResourceReorder::MoveLast:
+        std::rotate(next.begin() + current, next.begin() + current + 1, next.end());
+        break;
+    }
+    return next;
+}
+
+// 复用 Dock 资源区；所有监控项均可独立开关，按用户设定顺序紧凑排列。
 struct DockResourceVisibility {
     bool embeddedEnabled = false;
     bool cpuUsage = true;
@@ -137,6 +198,7 @@ struct DockResourceVisibility {
     bool smallFont = false; // 性能监测用小一号字，块与块之间更紧凑
     bool hideLabels = false; // 隐藏指标标签，常态仅显示数值，翻页或悬停时短暂提示
     ResourcePlacement placement = ResourcePlacement::End; // 仅内嵌模式生效，Dock 固定在右侧
+    DockResourceOrder order = defaultDockResourceOrder(); // 指标标识的显示顺序
     constexpr bool hasAnyMetric() const noexcept {
         return cpuUsage || memoryUsage || download || upload || gpuUsage || cpuFrequency;
     }

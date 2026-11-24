@@ -29,6 +29,26 @@ std::wstring wideOf(const std::string& s) {
     return w;
 }
 
+DockResourceOrder dockResourceOrderFromJson(const nlohmann::json& j, const char* key,
+                                             DockResourceOrder fallback) {
+    if (!j.contains(key) || !j[key].is_array() || j[key].size() != kDockResourceMetricCount)
+        return fallback;
+    DockResourceOrder order{};
+    for (size_t i = 0; i < kDockResourceMetricCount; ++i) {
+        if (!j[key][i].is_number_integer())
+            return fallback;
+        order[i] = j[key][i].get<int>();
+    }
+    return isValidDockResourceOrder(order) ? order : fallback;
+}
+
+nlohmann::json dockResourceOrderToJson(const DockResourceOrder& order) {
+    nlohmann::json result = nlohmann::json::array();
+    for (int metric : order)
+        result.push_back(metric);
+    return result;
+}
+
 COLORREF defaultFloatingCardBackgroundColor() {
     return fluent::isDarkMode(fluent::ThemeTarget::Window) ? RGB(0, 0, 0) : RGB(255, 255, 255);
 }
@@ -318,6 +338,7 @@ MonitorTaskbarSettings AppSettings::defaultMonitorTaskbarSettings(const std::wst
     profile.dockResourceSmallFont = dockResourceSmallFont_;
     profile.dockResourceHideLabels = dockResourceHideLabels_;
     profile.dockResourcePlacement = dockResourcePlacement_;
+    profile.dockResourceOrder = dockResourceOrder_;
     return profile;
 }
 
@@ -362,6 +383,7 @@ void AppSettings::syncLegacyTaskbarFieldsFromMonitor(const MonitorTaskbarSetting
     dockResourceSmallFont_ = profile.dockResourceSmallFont;
     dockResourceHideLabels_ = profile.dockResourceHideLabels;
     dockResourcePlacement_ = profile.dockResourcePlacement;
+    dockResourceOrder_ = profile.dockResourceOrder;
 }
 
 void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
@@ -471,6 +493,7 @@ void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
     dockResourceDownload_ = j.value("dockResourceDownload", true);
     dockResourceUpload_ = j.value("dockResourceUpload", true);
     dockResourceCpuFrequency_ = j.value("dockResourceCpuFrequency", false);
+    dockResourceOrder_ = dockResourceOrderFromJson(j, "dockResourceOrder", dockResourceOrder_);
     monitorTaskbarSettings_.clear();
     if (j.contains("monitorTaskbarSettings") && j["monitorTaskbarSettings"].is_array()) {
         for (const auto& entry : j["monitorTaskbarSettings"]) {
@@ -531,6 +554,8 @@ void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
             profile.dockResourceUpload = entry.value("dockResourceUpload", dockResourceUpload_);
             profile.dockResourceCpuFrequency =
                 entry.value("dockResourceCpuFrequency", dockResourceCpuFrequency_);
+            profile.dockResourceOrder =
+                dockResourceOrderFromJson(entry, "dockResourceOrder", dockResourceOrder_);
             monitorTaskbarSettings_.push_back(std::move(profile));
         }
     }
@@ -823,6 +848,7 @@ nlohmann::json AppSettings::toJson() const {
     j.erase("dockResourceBattery");
     j.erase("dockResourceTemperature");
     j["dockResourceCpuFrequency"] = dockResourceCpuFrequency_;
+    j["dockResourceOrder"] = dockResourceOrderToJson(dockResourceOrder_);
     if (!monitorTaskbarSettings_.empty()) {
         nlohmann::json monitors = nlohmann::json::array();
         for (const auto& profile : monitorTaskbarSettings_) {
@@ -849,6 +875,7 @@ nlohmann::json AppSettings::toJson() const {
                 {"dockResourceDownload", profile.dockResourceDownload},
                 {"dockResourceUpload", profile.dockResourceUpload},
                 {"dockResourceCpuFrequency", profile.dockResourceCpuFrequency},
+                {"dockResourceOrder", dockResourceOrderToJson(profile.dockResourceOrder)},
             };
             if (profile.taskbarPosition == 2) {
                 entry["taskbarAnchorRatio"] = profile.taskbarAnchorRatio;

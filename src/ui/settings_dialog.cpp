@@ -164,28 +164,46 @@ struct SettingsDialog::Impl {
     void createControls() { sections_.create(); }
     void openResourceMetricsMenu(const Row& row) {
         const auto& s = sections_.state;
-        const bool checked[kDockResourceMetricCount] = {
+        const bool checked[settings_ui::kDockResourceMetricCount] = {
             s.dockResourceCpuUsage,  s.dockResourceMemoryUsage,
             s.dockResourceUpload,    s.dockResourceDownload,
             s.dockResourceGpuUsage,  s.dockResourceCpuFrequency,
         };
-        static constexpr const wchar_t* kLabels[kDockResourceMetricCount] = {
+        static constexpr const wchar_t* kLabels[settings_ui::kDockResourceMetricCount] = {
             L"CPU 使用率", L"内存使用率", L"上行速度",
             L"下行速度",   L"GPU 使用率", L"CPU 频率",
         };
-        static constexpr const wchar_t* kExamples[kDockResourceMetricCount] = {
+        static constexpr const wchar_t* kExamples[settings_ui::kDockResourceMetricCount] = {
             L"CPU: 12%",      L"内存: 48%",  L"上行: 120KB/s",
             L"下行: 2.4MB/s", L"GPU: 7%",    L"频率: 3.6GHz",
         };
+        static constexpr const wchar_t* kReorderLabels[kDockResourceReorderOps] = {
+            L"上移", L"下移", L"移到首位", L"移到末位",
+        };
+        const DockResourceOrder order = isValidDockResourceOrder(s.dockResourceOrder)
+                                            ? s.dockResourceOrder
+                                            : defaultDockResourceOrder();
         std::vector<fluent::FluentMenuItem> items;
-        items.reserve(kDockResourceMetricCount);
-        for (int i = 0; i < kDockResourceMetricCount; ++i) {
+        items.reserve(settings_ui::kDockResourceMetricCount);
+        for (size_t position = 0; position < settings_ui::kDockResourceMetricCount; ++position) {
+            const int metric = order[position];
             fluent::FluentMenuItem item;
-            item.id = i;
-            item.text = kLabels[i];
-            item.rightText = kExamples[i];
-            item.checked = checked[i];
+            item.id = metric;
+            item.text = kLabels[metric];
+            item.rightText = std::wstring(kExamples[metric]) + L" · 第 " +
+                             std::to_wstring(position + 1) + L" 位";
+            item.checked = checked[metric];
             item.keepOpen = true;
+            const bool first = position == 0;
+            const bool last = position + 1 == settings_ui::kDockResourceMetricCount;
+            const bool noOp[kDockResourceReorderOps] = {first, last, first, last};
+            for (int op = 0; op < kDockResourceReorderOps; ++op) {
+                fluent::FluentMenuItem reorder;
+                reorder.id = kDockResourceReorderMenuBase + metric * kDockResourceReorderOps + op;
+                reorder.text = kReorderLabels[op];
+                reorder.enabled = !noOp[op];
+                item.submenu.push_back(std::move(reorder));
+            }
             items.push_back(std::move(item));
         }
 
@@ -199,11 +217,17 @@ struct SettingsDialog::Impl {
             GetCursorPos(&anchor);
         }
 
-        fluent::FluentMenu::show(hwnd, anchor, std::move(items), [this](int metricIndex) {
+        fluent::FluentMenu::show(hwnd, anchor, std::move(items), [this](int id) {
             if (!hwnd || !IsWindow(hwnd))
                 return;
-            if (metricIndex >= 0 && metricIndex < kDockResourceMetricCount)
-                onCommand(kIdDockResourceMetrics, metricIndex);
+            if (id >= kDockResourceReorderMenuBase &&
+                id < kDockResourceReorderMenuBase +
+                         settings_ui::kDockResourceMetricCount * kDockResourceReorderOps) {
+                onCommand(kIdDockResourceReorder, id - kDockResourceReorderMenuBase);
+                return;
+            }
+            if (id >= 0 && id < static_cast<int>(settings_ui::kDockResourceMetricCount))
+                onCommand(kIdDockResourceMetrics, id);
         });
     }
 

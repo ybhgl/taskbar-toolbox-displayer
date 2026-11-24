@@ -370,3 +370,55 @@ TEST_CASE("app_settings.per_monitor_profiles_and_appearance_override") {
     emptyMetrics.cpuFrequency = false;
     EXPECT_FALSE(emptyMetrics.hasAnyMetric());
 }
+
+TEST_CASE("dock_resource_order.reorder_persist_and_invalid_fallback") {
+    const int cpu = static_cast<int>(DockResourceMetric::Cpu);
+    const int memory = static_cast<int>(DockResourceMetric::Memory);
+    const int upload = static_cast<int>(DockResourceMetric::Upload);
+    const int download = static_cast<int>(DockResourceMetric::Download);
+
+    DockResourceOrder order = defaultDockResourceOrder();
+    EXPECT_TRUE(isValidDockResourceOrder(order));
+    order = reorderedDockResourceOrder(order, download, DockResourceReorder::MoveFirst);
+    EXPECT_EQ(order[0], download);
+    EXPECT_EQ(order[1], cpu);
+    order = reorderedDockResourceOrder(order, cpu, DockResourceReorder::MoveLast);
+    EXPECT_EQ(order.back(), cpu);
+    order = reorderedDockResourceOrder(order, memory, DockResourceReorder::MoveDown);
+    EXPECT_EQ(order[1], upload);
+    EXPECT_EQ(order[2], memory);
+
+    DockResourceOrder invalid{0, 0, 1, 2, 3, 4};
+    EXPECT_FALSE(isValidDockResourceOrder(invalid));
+    EXPECT_EQ(reorderedDockResourceOrder(invalid, cpu, DockResourceReorder::MoveUp),
+              defaultDockResourceOrder());
+
+    AppSettings settings;
+    settings.dockResourceOrder_ = order;
+    const auto profile = settings.defaultMonitorTaskbarSettings(L"ORDER-DISPLAY", true);
+    EXPECT_EQ(profile.dockResourceOrder, order);
+    auto& monitor = settings.ensureMonitorTaskbarSettings(L"ORDER-DISPLAY", true);
+    monitor.dockResourceOrder = reorderedDockResourceOrder(order, cpu, DockResourceReorder::MoveFirst);
+
+    bool migrateLog = false;
+    const nlohmann::json dumped = settings.toJson();
+    AppSettings loaded;
+    loaded.readJson(dumped, false, migrateLog);
+    EXPECT_EQ(loaded.dockResourceOrder_, order);
+    EXPECT_EQ(loaded.monitorTaskbarSettingsFor(L"ORDER-DISPLAY", true).dockResourceOrder,
+              monitor.dockResourceOrder);
+
+    nlohmann::json legacy = dumped;
+    legacy.erase("dockResourceOrder");
+    AppSettings withoutOrder;
+    withoutOrder.readJson(legacy, false, migrateLog);
+    EXPECT_EQ(withoutOrder.dockResourceOrder_, defaultDockResourceOrder());
+
+    nlohmann::json corrupted = dumped;
+    corrupted["dockResourceOrder"] = nlohmann::json::array({0, 0, 1, 2, 3, 4});
+    AppSettings fallback;
+    fallback.readJson(corrupted, false, migrateLog);
+    EXPECT_EQ(fallback.dockResourceOrder_, defaultDockResourceOrder());
+    EXPECT_EQ(fallback.monitorTaskbarSettingsFor(L"ORDER-DISPLAY", true).dockResourceOrder,
+              monitor.dockResourceOrder);
+}

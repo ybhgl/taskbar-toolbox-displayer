@@ -46,18 +46,34 @@ float ResourcePanel::width() const {
 
 std::vector<ResourcePanel::Reading> ResourcePanel::readings() const {
     std::vector<Reading> result;
-    if (dockResourceVisibility_.cpuUsage)
-        result.push_back({L"CPU", resourceCpuText_});
-    if (dockResourceVisibility_.memoryUsage)
-        result.push_back({L"内存", resourceMemoryText_});
-    if (dockResourceVisibility_.upload)
-        result.push_back({L"上行", resourceUploadText_});
-    if (dockResourceVisibility_.download)
-        result.push_back({L"下行", resourceDownloadText_});
-    if (dockResourceVisibility_.gpuUsage)
-        result.push_back({L"GPU", resourceGpuText_});
-    if (dockResourceVisibility_.cpuFrequency)
-        result.push_back({L"频率", resourceCpuFrequencyText_});
+    for (int metric : dockResourceVisibility_.order) {
+        switch (static_cast<DockResourceMetric>(metric)) {
+        case DockResourceMetric::Cpu:
+            if (dockResourceVisibility_.cpuUsage)
+                result.push_back({L"CPU", resourceCpuText_});
+            break;
+        case DockResourceMetric::Memory:
+            if (dockResourceVisibility_.memoryUsage)
+                result.push_back({L"内存", resourceMemoryText_});
+            break;
+        case DockResourceMetric::Upload:
+            if (dockResourceVisibility_.upload)
+                result.push_back({L"上行", resourceUploadText_});
+            break;
+        case DockResourceMetric::Download:
+            if (dockResourceVisibility_.download)
+                result.push_back({L"下行", resourceDownloadText_});
+            break;
+        case DockResourceMetric::Gpu:
+            if (dockResourceVisibility_.gpuUsage)
+                result.push_back({L"GPU", resourceGpuText_});
+            break;
+        case DockResourceMetric::CpuFrequency:
+            if (dockResourceVisibility_.cpuFrequency)
+                result.push_back({L"频率", resourceCpuFrequencyText_});
+            break;
+        }
+    }
     return result;
 }
 
@@ -479,10 +495,6 @@ ResourcePanel::ColumnMetrics ResourcePanel::measureColumnMetrics(IDWriteFactory*
         }
         ++cellIndex;
     };
-    if (dockResourceVisibility_.cpuUsage)
-        measureCell({L"100%", twoDigits + L"%"});
-    if (dockResourceVisibility_.memoryUsage)
-        measureCell({L"100%", twoDigits + L"%"});
     static constexpr const wchar_t* rateUnits[] = {L"B/s", L"KB/s", L"MB/s", L"GB/s", L"TB/s"};
     auto measureRate = [&] {
         std::vector<std::wstring> samples;
@@ -493,14 +505,34 @@ ResourcePanel::ColumnMetrics ResourcePanel::measureColumnMetrics(IDWriteFactory*
         }
         measureCell(samples);
     };
-    if (dockResourceVisibility_.upload)
-        measureRate();
-    if (dockResourceVisibility_.download)
-        measureRate();
-    if (dockResourceVisibility_.gpuUsage)
-        measureCell({L"100%", twoDigits + L"%"});
-    if (dockResourceVisibility_.cpuFrequency)
-        measureCell({decimalDigits + L"GHz"});
+    for (int metric : dockResourceVisibility_.order) {
+        switch (static_cast<DockResourceMetric>(metric)) {
+        case DockResourceMetric::Cpu:
+            if (dockResourceVisibility_.cpuUsage)
+                measureCell({L"100%", twoDigits + L"%"});
+            break;
+        case DockResourceMetric::Memory:
+            if (dockResourceVisibility_.memoryUsage)
+                measureCell({L"100%", twoDigits + L"%"});
+            break;
+        case DockResourceMetric::Upload:
+            if (dockResourceVisibility_.upload)
+                measureRate();
+            break;
+        case DockResourceMetric::Download:
+            if (dockResourceVisibility_.download)
+                measureRate();
+            break;
+        case DockResourceMetric::Gpu:
+            if (dockResourceVisibility_.gpuUsage)
+                measureCell({L"100%", twoDigits + L"%"});
+            break;
+        case DockResourceMetric::CpuFrequency:
+            if (dockResourceVisibility_.cpuFrequency)
+                measureCell({decimalDigits + L"GHz"});
+            break;
+        }
+    }
 
     for (auto& [left, right] : result.pageColumnWidths) {
         left = std::max(1.0f, std::ceil(left) + kResourceCellSafetyPadding);

@@ -448,6 +448,8 @@ private:
 
     void applyDockResourcePlacement(int placement);
 
+    void applyDockResourceReorder(int metric, int operation);
+
     bool isRenderMode(RenderMode mode) const;
 
     bool isMinimalRenderMode() const;

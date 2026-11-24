@@ -294,6 +294,7 @@ void App::applyMonitorSettingsToAll() {
         profile.dockResourceSmallFont = source.dockResourceSmallFont;
         profile.dockResourceHideLabels = source.dockResourceHideLabels;
         profile.dockResourcePlacement = source.dockResourcePlacement;
+        profile.dockResourceOrder = source.dockResourceOrder;
         if (display.primary)
             settings_.syncLegacyTaskbarFieldsFromMonitor(profile);
     }

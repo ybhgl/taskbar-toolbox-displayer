@@ -456,6 +456,18 @@ void SettingsSections::onCommand(int id, int option) {
                 actions.onDockResourceCpuFrequency(state.dockResourceCpuFrequency);
         }
         break;
+    case kIdDockResourceReorder: {
+        if (option < 0 || option >= kDockResourceMetricCount * kDockResourceReorderOps)
+            break;
+        const int metric = option / kDockResourceReorderOps;
+        const int operation = option % kDockResourceReorderOps;
+        state.dockResourceOrder = reorderedDockResourceOrder(
+            state.dockResourceOrder, metric, static_cast<DockResourceReorder>(operation));
+        updateImmersiveRowsEnabled();
+        if (actions.onDockResourceReorder)
+            actions.onDockResourceReorder(metric, operation);
+        break;
+    }
     case kIdDockResourcePlacement:
         state.dockResourcePlacement = std::clamp(row->selected, 0, 1);
         if (actions.onDockResourcePlacement)

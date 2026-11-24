@@ -64,12 +64,14 @@ TaskbarAppearance resolveTaskbarAppearance(const AppSettings& settings,
                                  monitor->dockResourceMemoryUsage, monitor->dockResourceDownload,
                                  monitor->dockResourceUpload, monitor->dockResourceGpuUsage,
                                  monitor->dockResourceCpuFrequency, monitor->dockResourceSmallFont,
-                                 monitor->dockResourceHideLabels, monitor->dockResourcePlacement}
+                                 monitor->dockResourceHideLabels, monitor->dockResourcePlacement,
+                                 monitor->dockResourceOrder}
         : DockResourceVisibility{settings.embeddedResourceMonitor_, settings.dockResourceCpuUsage_,
                                  settings.dockResourceMemoryUsage_, settings.dockResourceDownload_,
                                  settings.dockResourceUpload_, settings.dockResourceGpuUsage_,
                                  settings.dockResourceCpuFrequency_, settings.dockResourceSmallFont_,
-                                 settings.dockResourceHideLabels_, settings.dockResourcePlacement_};
+                                 settings.dockResourceHideLabels_, settings.dockResourcePlacement_,
+                                 settings.dockResourceOrder_};
     result.albumCoverVisible = settings.albumCoverVisible_;
     result.songTransitionEnabled = settings.songTransitionEnabled_;
     result.platformIconVisible = settings.platformIconVisible_;

@@ -15,6 +15,8 @@ public:
     const DockResourceVisibility& visibility() const { return dockResourceVisibility_; }
     void setVisibility(const DockResourceVisibility& value) {
         dockResourceVisibility_ = value;
+        if (!isValidDockResourceOrder(dockResourceVisibility_.order))
+            dockResourceVisibility_.order = defaultDockResourceOrder();
         if (!value.hideLabels)
             clearTransientLabels();
         resetPage();
