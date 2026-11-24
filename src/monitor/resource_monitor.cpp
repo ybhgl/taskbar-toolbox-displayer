@@ -43,25 +43,37 @@ uint64_t monotonicMilliseconds() {
             .count());
 }
 
-bool readNetworkTotals(uint64_t& received, uint64_t& sent) {
+bool readNetworkTotals(uint64_t& received, uint64_t& sent, uint64_t& interfaceIndex) {
+    // 默认路由指向的网卡才是当前实际出口。按 8.8.8.8 选路可让系统按路由度量
+    // 自动在以太网、WLAN、VPN 之间切换，避免把所有虚拟适配器的计数叠加。
+    sockaddr_in destination{};
+    destination.sin_family = AF_INET;
+    // 0x08080808 已是 8.8.8.8 的网络字节序，无需额外链接 ws2_32 的转换函数。
+    destination.sin_addr.s_addr = 0x08080808u;
+    DWORD bestIndex = 0;
+    if (GetBestInterfaceEx(reinterpret_cast<sockaddr*>(&destination), &bestIndex) != NO_ERROR ||
+        bestIndex == 0)
+        return false;
+
     MIB_IF_TABLE2* table = nullptr;
     if (GetIfTable2(&table) != NO_ERROR || !table)
         return false;
 
-    received = 0;
-    sent = 0;
+    bool found = false;
     for (ULONG i = 0; i < table->NumEntries; ++i) {
         const MIB_IF_ROW2& row = table->Table[i];
-        // 首版统计所有已连接的数据网卡，排除回环与隧道，避免本机流量和 VPN
-        // 封装流量被重复算入上下行。
-        if (row.OperStatus != IfOperStatusUp || row.Type == IF_TYPE_SOFTWARE_LOOPBACK ||
-            row.Type == IF_TYPE_TUNNEL)
+        // 出口已被唯一确定，隧道/VPN 若被选中就应计入；仅排除本机回环。
+        if (row.InterfaceIndex != bestIndex || row.OperStatus != IfOperStatusUp ||
+            row.Type == IF_TYPE_SOFTWARE_LOOPBACK)
             continue;
-        received += row.InOctets;
-        sent += row.OutOctets;
+        received = row.InOctets;
+        sent = row.OutOctets;
+        interfaceIndex = bestIndex;
+        found = true;
+        break;
     }
     FreeMibTable(table);
-    return true;
+    return found;
 }
 
 } // namespace
@@ -189,6 +201,7 @@ void ResourceMonitor::start() {
 
     haveCpuBaseline_ = false;
     haveNetworkBaseline_ = false;
+    previousNetworkInterfaceIndex_ = 0;
     stopRequested_ = false;
     ResourceSnapshot empty;
     empty.revision = snapshot_.revision + 1;
@@ -277,10 +290,13 @@ ResourceSnapshot ResourceMonitor::sample() {
 
     uint64_t received = 0;
     uint64_t sent = 0;
+    uint64_t interfaceIndex = 0;
     const uint64_t nowMs = monotonicMilliseconds();
-    if (readNetworkTotals(received, sent)) {
-        if (haveNetworkBaseline_ && nowMs > previousNetworkTickMs_ &&
-            received >= previousNetworkIn_ && sent >= previousNetworkOut_) {
+    if (readNetworkTotals(received, sent, interfaceIndex)) {
+        const bool sameInterface =
+            haveNetworkBaseline_ && interfaceIndex == previousNetworkInterfaceIndex_;
+        if (sameInterface && nowMs > previousNetworkTickMs_ && received >= previousNetworkIn_ &&
+            sent >= previousNetworkOut_) {
             const uint64_t elapsedMs = nowMs - previousNetworkTickMs_;
             result.downloadBytesPerSecond = static_cast<uint64_t>(std::llround(
                 static_cast<long double>(received - previousNetworkIn_) * 1000.0L /
@@ -293,7 +309,11 @@ ResourceSnapshot ResourceMonitor::sample() {
         previousNetworkIn_ = received;
         previousNetworkOut_ = sent;
         previousNetworkTickMs_ = nowMs;
+        previousNetworkInterfaceIndex_ = interfaceIndex;
         haveNetworkBaseline_ = true;
+    } else {
+        haveNetworkBaseline_ = false;
+        previousNetworkInterfaceIndex_ = 0;
     }
 
     SYSTEM_POWER_STATUS powerStatus{};

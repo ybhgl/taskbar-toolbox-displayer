@@ -61,6 +61,7 @@ private:
     uint64_t previousCpuUser_ = 0;
 
     bool haveNetworkBaseline_ = false;
+    uint64_t previousNetworkInterfaceIndex_ = 0;
     uint64_t previousNetworkIn_ = 0;
     uint64_t previousNetworkOut_ = 0;
     uint64_t previousNetworkTickMs_ = 0;
