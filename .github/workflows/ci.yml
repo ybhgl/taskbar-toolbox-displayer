@@ -1,0 +1,59 @@
+name: CI Build and Test
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test Windows x64 Debug
+    runs-on: windows-2022
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v5
+        with:
+          path: vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Configure MSVC environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsPath) {
+            throw 'A Visual Studio installation with the x64 C++ toolchain was not found.'
+          }
+
+          Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          "PATH=$env:PATH" >> $env:GITHUB_ENV
+          "INCLUDE=$env:INCLUDE" >> $env:GITHUB_ENV
+          "LIB=$env:LIB" >> $env:GITHUB_ENV
+          "LIBPATH=$env:LIBPATH" >> $env:GITHUB_ENV
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset windows-msvc-debug
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset windows-msvc-debug
+
+      - name: Run tests
+        shell: pwsh
+        run: ctest --test-dir build/windows-msvc-debug --output-on-failure
