@@ -284,13 +284,11 @@ private:
     bool updatePromptBackdrop_ = false;
     fluent::FluentDialogSurface updatePromptSurface_;
     std::wstring updatePromptLatestVersion_;
-    bool updatePromptUseGiteeSource_ = false;
     D2D1_RECT_F updatePromptTitleRect_{};
     D2D1_RECT_F updatePromptSubtitleRect_{};
     D2D1_RECT_F updatePromptVersionCardRect_{};
     D2D1_RECT_F updatePromptCurrentVersionRect_{};
     D2D1_RECT_F updatePromptLatestVersionRect_{};
-    D2D1_RECT_F updatePromptSourceRect_{};
     D2D1_RECT_F updatePromptReleasePageRect_{};
     D2D1_RECT_F updatePromptDownloadRect_{};
     D2D1_RECT_F updatePromptAboutRect_{};

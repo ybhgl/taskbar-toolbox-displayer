@@ -617,7 +617,6 @@ void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
     taskbarBackground_ = std::clamp(j.value("taskbarBackground", 0), 0, 2);
     coverBackgroundOpacity_ = std::clamp(j.value("coverBackgroundOpacity", 60), 0, 100);
     autoCheckOnStartup_ = j.value("autoCheckOnStartup", true);
-    useGiteeUpdateSource_ = j.value("updateSource", std::string("github")) == "gitee";
     lyricFollowAlbum_ = j.value("lyricFollowAlbum", false);
     if (j.contains("secondaryLyricEnabled") || j.contains("secondaryLyricType")) {
         secondaryLyricEnabled_ = j.value("secondaryLyricEnabled", true);
@@ -939,7 +938,6 @@ nlohmann::json AppSettings::toJson() const {
     j["taskbarBackground"] = taskbarBackground_;
     j["coverBackgroundOpacity"] = coverBackgroundOpacity_;
     j["autoCheckOnStartup"] = autoCheckOnStartup_;
-    j["updateSource"] = useGiteeUpdateSource_ ? "gitee" : "github";
     j["lyricFollowAlbum"] = lyricFollowAlbum_;
     j["secondaryLyricEnabled"] = secondaryLyricEnabled_;
     j["secondaryLyricType"] = preferRomanization_ ? "romanization" : "translation";

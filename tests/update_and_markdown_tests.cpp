@@ -35,8 +35,7 @@ TEST_CASE("update_service.proxy_selection_and_release_json_parsing") {
     EXPECT_EQ(update_service::proxyUrlForCurl(L"socks5h://127.0.0.1:1080"),
               std::string("socks5h://127.0.0.1:1080"));
 
-    const auto noRelease = update_service::parseLatestReleaseResponse(
-        1, update_service::UpdateSource::GitHub, 404, "", L"2.15.0");
+    const auto noRelease = update_service::parseLatestReleaseResponse(1, 404, "", L"2.15.0");
     EXPECT_EQ(noRelease.state, update_service::UpdateState::NoRelease);
 
     const std::string body = R"({
@@ -56,21 +55,18 @@ TEST_CASE("update_service.proxy_selection_and_release_json_parsing") {
             }
         ]
     })";
-    const auto available = update_service::parseLatestReleaseResponse(
-        42, update_service::UpdateSource::Gitee, 200, body, L"2.15.0");
+    const auto available =
+        update_service::parseLatestReleaseResponse(42, 200, body, L"2.15.0");
     EXPECT_EQ(available.requestId, 42ull);
     EXPECT_EQ(available.state, update_service::UpdateState::Available);
     EXPECT_EQ(available.version, std::wstring(L"v2.16.0"));
-    EXPECT_EQ(available.releaseUrl,
-              std::wstring(update_service::updateSourceReleasePage(
-                  update_service::UpdateSource::Gitee)));
+    EXPECT_EQ(available.releaseUrl, std::wstring(app_info::kLatestReleasePage));
     EXPECT_TRUE(available.release.has_value());
     EXPECT_EQ(available.release->installerName,
               std::wstring(L"WindowsTaskbarLyrics-2.16.0-Setup.exe"));
     EXPECT_EQ(available.release->installerSize, 1234567);
 
-    const auto current = update_service::parseLatestReleaseResponse(
-        43, update_service::UpdateSource::GitHub, 200, body, L"2.16.0");
+    const auto current = update_service::parseLatestReleaseResponse(43, 200, body, L"2.16.0");
     EXPECT_EQ(current.state, update_service::UpdateState::Current);
 }
 

@@ -122,28 +122,6 @@ const wchar_t* updateStateName(UpdateState state) {
     }
 }
 
-const wchar_t* updateSourceName(UpdateSource source) {
-    return source == UpdateSource::Gitee ? L"Gitee" : L"GitHub";
-}
-
-const char* updateSourceApi(UpdateSource source) {
-    return source == UpdateSource::Gitee ? app_info::kGiteeLatestReleaseApi
-                                         : app_info::kLatestReleaseApi;
-}
-
-const wchar_t* updateSourceReleasePage(UpdateSource source) {
-    return source == UpdateSource::Gitee ? app_info::kGiteeLatestReleasePage
-                                         : app_info::kLatestReleasePage;
-}
-
-int updateSourceIndex(UpdateSource source) {
-    return source == UpdateSource::Gitee ? 1 : 0;
-}
-
-UpdateSource updateSourceFromIndex(int index) {
-    return index == 1 ? UpdateSource::Gitee : UpdateSource::GitHub;
-}
-
 std::optional<std::vector<int>> parseVersion(const std::wstring& value) {
     if (value.empty())
         return std::nullopt;
@@ -278,34 +256,34 @@ std::string systemProxyForUrl(const std::wstring& url) {
     return proxyUrlForCurl(selectedProxy);
 }
 
-UpdateCheckResult parseLatestReleaseResponse(uint64_t requestId, UpdateSource source,
-                                             long responseCode, const std::string& body,
+UpdateCheckResult parseLatestReleaseResponse(uint64_t requestId, long responseCode,
+                                             const std::string& body,
                                              const std::wstring& currentVersion) {
-    const std::wstring sourceName = updateSourceName(source);
+    constexpr const wchar_t* kSourceName = L"GitHub";
     auto failResult = [&](UpdateState state, std::wstring detail) {
         return UpdateCheckResult{requestId, state, {}, {}, std::move(detail), std::nullopt};
     };
 
     if (responseCode == 404)
-        return failResult(UpdateState::NoRelease, sourceName + L" 尚未发布可供检查的正式版本");
+        return failResult(UpdateState::NoRelease, std::wstring(kSourceName) + L" 尚未发布可供检查的正式版本");
     if (responseCode != 200)
         return failResult(UpdateState::Failed,
-                          sourceName + L" 返回 HTTP " + std::to_wstring(responseCode));
+                          std::wstring(kSourceName) + L" 返回 HTTP " + std::to_wstring(responseCode));
 
     auto json = nlohmann::json::parse(body, nullptr, false);
     if (json.is_discarded() || !json.is_object())
-        return failResult(UpdateState::Failed, L"无法读取 " + sourceName + L" 返回的数据");
+        return failResult(UpdateState::Failed, L"无法读取 " + std::wstring(kSourceName) + L" 返回的数据");
     if (!json.contains("tag_name") || !json["tag_name"].is_string())
         return failResult(UpdateState::Failed, L"最新版本信息不完整");
 
     const std::string versionTag = json["tag_name"].get<std::string>();
     ReleaseInfo latestRelease;
     latestRelease.version = wideOf(versionTag);
-    // Gitee v5 的 latest Release 响应可能没有 html_url，使用已知发布页作为回退。
+    // Release 响应缺少 html_url 时回退到已知发布页。
     if (json.contains("html_url") && json["html_url"].is_string())
         latestRelease.releaseUrl = wideOf(json["html_url"].get<std::string>());
     else
-        latestRelease.releaseUrl = updateSourceReleasePage(source);
+        latestRelease.releaseUrl = app_info::kLatestReleasePage;
     if (json.contains("published_at") && json["published_at"].is_string())
         latestRelease.publishedAt = wideOf(json["published_at"].get<std::string>());
     if (json.contains("body") && json["body"].is_string())
@@ -368,9 +346,9 @@ std::wstring makeTempInstallerPath(const std::wstring& installerName) {
     return path;
 }
 
-void requestLatestRelease(uint64_t requestId, UpdateSource source,
+void requestLatestRelease(uint64_t requestId,
                           std::function<void(UpdateCheckResult)> onResult) {
-    std::thread([requestId, source, onResult = std::move(onResult)] {
+    std::thread([requestId, onResult = std::move(onResult)] {
         const auto publish = [&](UpdateCheckResult result) {
             if (onResult)
                 onResult(std::move(result));
@@ -384,13 +362,10 @@ void requestLatestRelease(uint64_t requestId, UpdateSource source,
 
         std::string body;
         constexpr char kUserAgent[] = "QQMusicLyric";
-        curl_slist* headers = nullptr;
-        if (source == UpdateSource::GitHub) {
-            headers = curl_slist_append(headers, "Accept: application/vnd.github+json");
-            headers = curl_slist_append(headers, "X-GitHub-Api-Version: 2022-11-28");
-        }
+        curl_slist* headers = curl_slist_append(nullptr, "Accept: application/vnd.github+json");
+        headers = curl_slist_append(headers, "X-GitHub-Api-Version: 2022-11-28");
 
-        curl_easy_setopt(curl, CURLOPT_URL, updateSourceApi(source));
+        curl_easy_setopt(curl, CURLOPT_URL, app_info::kLatestReleaseApi);
         // 版本 API 保持直连；只让体积较大的安装器下载读取系统代理，避免代理节点对
         // 代码托管平台的 API 返回异常。空字符串会显式禁用环境变量代理。
         curl_easy_setopt(curl, CURLOPT_PROXY, "");
@@ -417,7 +392,7 @@ void requestLatestRelease(uint64_t requestId, UpdateSource source,
                                       std::nullopt});
             return;
         }
-        publish(parseLatestReleaseResponse(requestId, source, responseCode, body));
+        publish(parseLatestReleaseResponse(requestId, responseCode, body));
     }).detach();
 }
 

@@ -954,15 +954,13 @@ void App::pickCustomLocalLyricsPath() {
 void App::showUpdatePrompt(const std::wstring& latestVersion) {
     if (latestVersion.empty())
         return;
-    runtime_log::writef(L"[action][update] prompt version=%s source=%s", latestVersion.c_str(),
-                        settings_.useGiteeUpdateSource_ ? L"gitee" : L"github");
+    runtime_log::writef(L"[action][update] prompt version=%s", latestVersion.c_str());
     if (updatePromptHwnd_) {
         SetForegroundWindow(updatePromptHwnd_);
         return;
     }
 
     updatePromptLatestVersion_ = latestVersion;
-    updatePromptUseGiteeSource_ = settings_.useGiteeUpdateSource_;
     updatePromptHoverId_ = 0;
     updatePromptPressedId_ = 0;
     updatePromptFocusedId_ = kUpdatePromptAbout;
@@ -1020,11 +1018,7 @@ void App::layoutUpdatePrompt() {
     const float titleH = 30.0f;
     const float subtitleH = 20.0f;
     const float titleW = 112.0f;
-    const float sourceX = pad + titleW + fluent::metrics::compactGap;
-    const float sourceY = pad + 8.0f;
     updatePromptTitleRect_ = D2D1::RectF(pad, pad, pad + titleW, pad + titleH);
-    updatePromptSourceRect_ =
-        D2D1::RectF(sourceX, sourceY, std::max(sourceX, w - pad), pad + titleH);
     updatePromptSubtitleRect_ =
         D2D1::RectF(pad, pad + titleH, std::max(pad, w - pad), pad + titleH + subtitleH);
 
@@ -1085,9 +1079,6 @@ void App::drawUpdatePromptButton(fluent::FluentDialogSurface::Painter& painter,
 void App::paintUpdatePrompt(fluent::FluentDialogSurface::Painter& painter, float, float) {
     const auto& p = fluent::palette();
     painter.drawText(L"发现新版本", painter.textFormat(21.0f, 600), updatePromptTitleRect_, p.text);
-    painter.drawText(std::wstring(L"更新源：") +
-                         (updatePromptUseGiteeSource_ ? L"Gitee" : L"GitHub"),
-                     painter.textFormat(13.0f, 400), updatePromptSourceRect_, p.textSecondary);
     painter.drawText(L"检测到新的正式版本，可选择查看详情或立即更新",
                      painter.textFormat(13.0f, 400), updatePromptSubtitleRect_, p.textSecondary);
 
@@ -1150,12 +1141,10 @@ void App::onUpdatePromptCommand(int command) {
                             : command == kUpdatePromptDownload  ? L"download"
                                                                 : L"open-about";
     runtime_log::writef(L"[action][update-prompt] command=%s", action);
-    const bool useGiteeSource = updatePromptUseGiteeSource_;
     closeUpdatePrompt();
     if (command == kUpdatePromptReleasePage) {
-        const wchar_t* releasePage =
-            useGiteeSource ? app_info::kGiteeLatestReleasePage : app_info::kLatestReleasePage;
-        ShellExecuteW(nullptr, L"open", releasePage, nullptr, nullptr, SW_SHOWNORMAL);
+        ShellExecuteW(nullptr, L"open", app_info::kLatestReleasePage, nullptr, nullptr,
+                      SW_SHOWNORMAL);
     } else if (command == kUpdatePromptDownload) {
         showAbout(true);
     } else {
@@ -1337,15 +1326,7 @@ void App::showAbout(bool downloadUpdate) {
     aboutDialog = std::make_unique<AboutDialog>();
     if (!aboutDialog->create(
             GetModuleHandleW(nullptr), trayHwnd, settings_.autoCheckOnStartup_,
-            settings_.useGiteeUpdateSource_,
             [this](bool enabled) { setAutoCheckOnStartup(enabled); },
-            [this](bool useGitee) {
-                if (settings_.useGiteeUpdateSource_ == useGitee)
-                    return;
-                settings_.useGiteeUpdateSource_ = useGitee;
-                runtime_log::writef(L"[action][update] source=%s", useGitee ? L"gitee" : L"github");
-                saveSettings();
-            },
             [this](const std::wstring& path) { return launchUpdateInstaller(path); },
             startupUpdateCheck_.get())) {
         aboutDialog.reset();

@@ -218,7 +218,6 @@ bool App::initialize(HINSTANCE inst, bool wantTaskbar) {
     // 对话框按需创建；启动检查通过主线程队列接收结果，不预创建关于界面。
     if (settings_.autoCheckOnStartup_) {
         startupUpdateCheck_ = std::make_unique<StartupUpdateCheck>(
-            settings_.useGiteeUpdateSource_,
             [this](const std::wstring& version) { showUpdatePrompt(version); });
     }
     if (wantTaskbar) {

@@ -8,7 +8,7 @@
 
 class StartupUpdateCheck;
 
-// 软件关于窗口：显示应用信息，并从用户选择的 GitHub/Gitee Release 检查正式版本更新。
+// 软件关于窗口：显示应用信息，并从 GitHub Release 检查正式版本更新。
 class AboutDialog {
 public:
     AboutDialog();
@@ -18,9 +18,7 @@ public:
     AboutDialog& operator=(const AboutDialog&) = delete;
 
     bool create(HINSTANCE inst, HWND parent, bool autoCheckOnStartup = true,
-                bool useGiteeUpdateSource = false,
                 std::function<void(bool)> onAutoCheckChanged = {},
-                std::function<void(bool)> onUpdateSourceChanged = {},
                 std::function<bool(const std::wstring&)> onInstallUpdate = {},
                 StartupUpdateCheck* startupCheck = nullptr);
     void show(bool downloadUpdate = false);

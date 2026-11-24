@@ -133,7 +133,6 @@ struct AppSettings {
     int taskbarBackground_ = 0;
     int coverBackgroundOpacity_ = 60;
     bool autoCheckOnStartup_ = true;
-    bool useGiteeUpdateSource_ = false;
     bool lyricFollowAlbum_ = false;
     bool secondaryLyricEnabled_ = true;
     bool preferRomanization_ = false;

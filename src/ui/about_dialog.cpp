@@ -33,9 +33,6 @@ constexpr int kIdReleaseButton = 308;
 constexpr int kIdCloseButton = 309;
 constexpr int kIdReleaseNotes = 312;
 constexpr int kIdAutoCheckSwitch = 314;
-constexpr int kIdGiteeProjectButton = 315;
-constexpr int kIdGithubSourceButton = 316;
-constexpr int kIdGiteeSourceButton = 317;
 constexpr int kIdReleaseNotesTab = 318;
 constexpr int kIdDisclaimerTab = 319;
 
@@ -89,7 +86,7 @@ void openUrl(const wchar_t* url) {
     ShellExecuteW(nullptr, L"open", url, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-enum class AboutButtonIcon { None, GitHub, Gitee };
+enum class AboutButtonIcon { None, GitHub };
 
 // 在 16x16 坐标系中构造 GitHub Octocat 圆形镂空剪影（外圆与猫头轮廓组成单条闭合环路）。
 Microsoft::WRL::ComPtr<ID2D1PathGeometry> createGitHubIconGeometry(ID2D1Factory* factory) {
@@ -134,46 +131,6 @@ Microsoft::WRL::ComPtr<ID2D1PathGeometry> createGitHubIconGeometry(ID2D1Factory*
     return geometry;
 }
 
-// 在 16x16 坐标系中构造 Gitee 标志性圆角几何 G 轮廓。
-Microsoft::WRL::ComPtr<ID2D1PathGeometry> createGiteeIconGeometry(ID2D1Factory* factory) {
-    if (!factory)
-        return {};
-    Microsoft::WRL::ComPtr<ID2D1PathGeometry> geometry;
-    if (FAILED(factory->CreatePathGeometry(&geometry)) || !geometry)
-        return {};
-
-    Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
-    if (FAILED(geometry->Open(&sink)) || !sink)
-        return {};
-
-    sink->BeginFigure({12.2f, 3.8f}, D2D1_FIGURE_BEGIN_FILLED);
-    sink->AddLine({7.5f, 3.8f});
-    sink->AddArc(D2D1::ArcSegment({3.8f, 7.5f}, D2D1::SizeF(3.7f, 3.7f), 0.0f,
-                                  D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
-    sink->AddLine({3.8f, 11.45f});
-    sink->AddArc(D2D1::ArcSegment({4.55f, 12.2f}, D2D1::SizeF(0.75f, 0.75f), 0.0f,
-                                  D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
-    sink->AddLine({11.45f, 12.2f});
-    sink->AddArc(D2D1::ArcSegment({12.2f, 11.45f}, D2D1::SizeF(0.75f, 0.75f), 0.0f,
-                                  D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
-    sink->AddLine({12.2f, 7.25f});
-    sink->AddLine({7.5f, 7.25f});
-    sink->AddLine({7.5f, 8.8f});
-    sink->AddLine({10.55f, 8.8f});
-    sink->AddLine({10.55f, 10.55f});
-    sink->AddLine({5.45f, 10.55f});
-    sink->AddLine({5.45f, 7.5f});
-    sink->AddArc(D2D1::ArcSegment({7.5f, 5.45f}, D2D1::SizeF(2.05f, 2.05f), 0.0f,
-                                  D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
-    sink->AddLine({12.2f, 5.45f});
-    sink->AddLine({12.2f, 3.8f});
-    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-
-    if (FAILED(sink->Close()))
-        return {};
-    return geometry;
-}
-
 } // namespace
 
 struct AboutDialog::Impl {
@@ -186,11 +143,9 @@ struct AboutDialog::Impl {
     bool installingUpdate = false;
     bool autoCheckOnStartup = true;
     bool downloadAfterCheck = false;
-    update_service::UpdateSource updateSource = update_service::UpdateSource::GitHub;
     uint64_t activeRequest = 0;
     std::wstring releaseUrl = app_info::kLatestReleasePage;
     std::function<void(bool)> onAutoCheckChanged;
-    std::function<void(bool)> onUpdateSourceChanged;
     std::function<bool(const std::wstring&)> onInstallUpdate;
     std::optional<update_service::ReleaseInfo> latestRelease;
     std::shared_ptr<std::atomic_bool> downloadCancel;
@@ -216,10 +171,6 @@ struct AboutDialog::Impl {
     D2D1_RECT_F statusRect{};
     D2D1_RECT_F latestRect{};
     D2D1_RECT_F projectRect{};
-    D2D1_RECT_F giteeProjectRect{};
-    D2D1_RECT_F updateSourceLabelRect{};
-    D2D1_RECT_F githubSourceRect{};
-    D2D1_RECT_F giteeSourceRect{};
     D2D1_RECT_F checkRect{};
     D2D1_RECT_F releaseRect{};
     D2D1_RECT_F closeRect{};
@@ -231,7 +182,6 @@ struct AboutDialog::Impl {
     int focusedId = kIdAutoCheckSwitch;
     bool focusVisible = false;
     Microsoft::WRL::ComPtr<ID2D1PathGeometry> githubIconGeometry;
-    Microsoft::WRL::ComPtr<ID2D1PathGeometry> giteeIconGeometry;
 
     static LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         Impl* self = nullptr;
@@ -251,17 +201,11 @@ struct AboutDialog::Impl {
         return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
     }
 
-    bool canChangeUpdateSource() const {
-        return hwnd && !downloading && !installingUpdate && downloadedInstallerPath.empty();
-    }
-
     bool isEnabled(int id) const {
         if (id == kIdCheckButton)
             return !checking && !downloading && !installingUpdate && downloadedInstallerPath.empty();
         if (id == kIdReleaseButton)
             return releaseButtonEnabled && !checking && !downloading && !installingUpdate;
-        if (id == kIdGithubSourceButton || id == kIdGiteeSourceButton)
-            return canChangeUpdateSource();
         return true;
     }
 
@@ -278,8 +222,6 @@ struct AboutDialog::Impl {
 
         if (icon == AboutButtonIcon::GitHub && !githubIconGeometry)
             githubIconGeometry = createGitHubIconGeometry(factory.Get());
-        if (icon == AboutButtonIcon::Gitee && !giteeIconGeometry)
-            giteeIconGeometry = createGiteeIconGeometry(factory.Get());
 
         D2D1_MATRIX_3X2_F savedTransform{};
         rt->GetTransform(&savedTransform);
@@ -291,11 +233,6 @@ struct AboutDialog::Impl {
         if (icon == AboutButtonIcon::GitHub && githubIconGeometry) {
             if (auto* brush = painter.brush(textColor))
                 rt->FillGeometry(githubIconGeometry.Get(), brush);
-        } else if (icon == AboutButtonIcon::Gitee && giteeIconGeometry) {
-            if (auto* redBrush = painter.brush(fluent::toD2D(RGB(0xC7, 0x1D, 0x23))))
-                rt->FillEllipse(D2D1::Ellipse({8.0f, 8.0f}, 7.6f, 7.6f), redBrush);
-            if (auto* whiteBrush = painter.brush(D2D1::ColorF(D2D1::ColorF::White)))
-                rt->FillGeometry(giteeIconGeometry.Get(), whiteBrush);
         }
 
         rt->SetTransform(savedTransform);
@@ -355,46 +292,6 @@ struct AboutDialog::Impl {
         painter.drawText(text, format,
                          D2D1::RectF(rect.left + 4.0f, rect.top, rect.right - 4.0f, rect.bottom),
                          textColor);
-    }
-
-    void drawUpdateSourceRadio(fluent::FluentDialogSurface::Painter& painter,
-                               const D2D1_RECT_F& rect, const wchar_t* text, bool selected,
-                               int id) {
-        const auto& p = fluent::palette();
-        const bool enabled = isEnabled(id);
-        const bool hovered = enabled && hoverId == id;
-        const bool pressed = enabled && pressedId == id;
-        const float centerY = (rect.top + rect.bottom) * 0.5f;
-        const D2D1_ELLIPSE circle{D2D1::Point2F(rect.left + 8.0f, centerY), 8.0f, 8.0f};
-
-        if (!enabled) {
-            if (auto* br = painter.brush(p.disabled)) {
-                painter.target()->DrawEllipse(circle, br, 1.0f);
-                if (selected)
-                    painter.target()->FillEllipse(D2D1::Ellipse(circle.point, 4.0f, 4.0f), br);
-            }
-        } else if (selected) {
-            if (auto* br = painter.brush(pressed || hovered ? p.accentHover : p.accent))
-                painter.target()->FillEllipse(circle, br);
-            if (auto* br = painter.brush(p.textOnAccent))
-                painter.target()->FillEllipse(D2D1::Ellipse(circle.point, 4.0f, 4.0f), br);
-        } else {
-            if (hovered) {
-                if (auto* br = painter.brush(p.listHover))
-                    painter.target()->FillEllipse(circle, br);
-            }
-            if (auto* br = painter.brush(p.textSecondary))
-                painter.target()->DrawEllipse(circle, br, pressed ? 1.5f : 1.0f);
-        }
-
-        painter.drawText(text, painter.textFormat(fluent::font_sizes::label, 400),
-                         D2D1::RectF(rect.left + 24.0f, rect.top, rect.right, rect.bottom),
-                         enabled ? p.text : p.disabled);
-        if (focusedId == id && focusVisible && enabled) {
-            if (auto* br = painter.brush(p.accent))
-                painter.target()->DrawEllipse(
-                    D2D1::Ellipse(circle.point, 10.0f, 10.0f), br, 1.5f);
-        }
     }
 
     void drawToggle(fluent::FluentDialogSurface::Painter& painter, const D2D1_RECT_F& rect,
@@ -479,21 +376,12 @@ struct AboutDialog::Impl {
         drawToggle(painter, autoSwitchRect, autoCheckOnStartup);
         drawButton(painter, projectRect, L"GitHub", false, kIdProjectButton,
                    AboutButtonIcon::GitHub);
-        drawButton(painter, giteeProjectRect, L"Gitee", false, kIdGiteeProjectButton,
-                   AboutButtonIcon::Gitee);
 
         const AboutPanelTab activeTab = releaseNotes.activeTab();
         drawPanelTab(painter, releaseNotesTabRect, L"更新日志",
                      activeTab == AboutPanelTab::ReleaseNotes, kIdReleaseNotesTab);
         drawPanelTab(painter, disclaimerTabRect, L"免责声明",
                      activeTab == AboutPanelTab::Disclaimer, kIdDisclaimerTab);
-        painter.drawText(L"更新来源", painter.textFormat(fluent::font_sizes::label, 400), updateSourceLabelRect,
-                         p.textSecondary);
-        const int selectedSource = update_service::updateSourceIndex(updateSource);
-        drawUpdateSourceRadio(painter, githubSourceRect, L"GitHub",
-                              selectedSource == 0, kIdGithubSourceButton);
-        drawUpdateSourceRadio(painter, giteeSourceRect, L"Gitee",
-                              selectedSource == 1, kIdGiteeSourceButton);
         releaseNotes.paint(painter, notesRect, scrollbarRight);
         painter.drawText(statusText, painter.textFormat(fluent::font_sizes::label, 400), statusRect, p.textSecondary);
         painter.drawText(latestText, painter.textFormat(fluent::font_sizes::label, 400), latestRect, p.textSecondary);
@@ -508,16 +396,10 @@ struct AboutDialog::Impl {
             return kIdAutoCheckSwitch;
         if (contains(projectRect, x, y))
             return kIdProjectButton;
-        if (contains(giteeProjectRect, x, y))
-            return kIdGiteeProjectButton;
         if (contains(releaseNotesTabRect, x, y))
             return kIdReleaseNotesTab;
         if (contains(disclaimerTabRect, x, y))
             return kIdDisclaimerTab;
-        if (contains(githubSourceRect, x, y))
-            return kIdGithubSourceButton;
-        if (contains(giteeSourceRect, x, y))
-            return kIdGiteeSourceButton;
         if (contains(checkRect, x, y))
             return kIdCheckButton;
         if (contains(releaseRect, x, y))
@@ -530,9 +412,8 @@ struct AboutDialog::Impl {
     }
 
     std::vector<int> focusOrder() const {
-        std::vector<int> order{kIdAutoCheckSwitch, kIdProjectButton, kIdGiteeProjectButton,
-                               kIdReleaseNotesTab, kIdDisclaimerTab,
-                               kIdGithubSourceButton, kIdGiteeSourceButton, kIdCheckButton,
+        std::vector<int> order{kIdAutoCheckSwitch, kIdProjectButton,
+                               kIdReleaseNotesTab, kIdDisclaimerTab, kIdCheckButton,
                                kIdReleaseButton, kIdCloseButton};
         order.erase(std::remove_if(order.begin(), order.end(),
                                    [this](int id) { return !isEnabled(id); }),
@@ -553,39 +434,17 @@ struct AboutDialog::Impl {
         surface.invalidate();
     }
 
-    void selectUpdateSource(update_service::UpdateSource source) {
-        if (source == updateSource || !canChangeUpdateSource())
-            return;
-        updateSource = source;
-        releaseNotes.setActiveTab(AboutPanelTab::ReleaseNotes);
-        runtime_log::writef(L"[action][update] source=%s",
-                            update_service::updateSourceName(updateSource));
-        if (onUpdateSourceChanged)
-            onUpdateSourceChanged(updateSource == update_service::UpdateSource::Gitee);
-        checking = false;
-        startCheck();
-    }
-
     void onCommand(int id) {
         runtime_log::writef(L"[action][about] command=%d", id);
         switch (id) {
         case kIdProjectButton:
             openUrl(app_info::kProjectUrl);
             break;
-        case kIdGiteeProjectButton:
-            openUrl(app_info::kGiteeProjectUrl);
-            break;
         case kIdReleaseNotesTab:
             releaseNotes.setActiveTab(AboutPanelTab::ReleaseNotes);
             break;
         case kIdDisclaimerTab:
             releaseNotes.setActiveTab(AboutPanelTab::Disclaimer);
-            break;
-        case kIdGithubSourceButton:
-            selectUpdateSource(update_service::UpdateSource::GitHub);
-            break;
-        case kIdGiteeSourceButton:
-            selectUpdateSource(update_service::UpdateSource::Gitee);
             break;
         case kIdAutoCheckSwitch:
             autoCheckOnStartup = !autoCheckOnStartup;
@@ -596,8 +455,7 @@ struct AboutDialog::Impl {
             break;
         case kIdCheckButton:
             releaseNotes.setActiveTab(AboutPanelTab::ReleaseNotes);
-            runtime_log::writef(L"[action][update] check-request source=%s",
-                                update_service::updateSourceName(updateSource));
+            runtime_log::writef(L"[action][update] check-request");
             startCheck();
             break;
         case kIdReleaseButton:
@@ -772,15 +630,6 @@ struct AboutDialog::Impl {
                     onCommand(next);
                     return 0;
                 }
-                if (focusedId == kIdGithubSourceButton || focusedId == kIdGiteeSourceButton) {
-                    if (canChangeUpdateSource()) {
-                        const int current = focusedId == kIdGiteeSourceButton ? 1 : 0;
-                        const int next = (current + (wp == VK_RIGHT ? 1 : -1) + 2) % 2;
-                        focusedId = next == 1 ? kIdGiteeSourceButton : kIdGithubSourceButton;
-                        selectUpdateSource(update_service::updateSourceFromIndex(next));
-                    }
-                    return 0;
-                }
             }
             if (wp == VK_SPACE || wp == VK_RETURN) {
                 if (focusedId != 0 && isEnabled(focusedId))
@@ -804,10 +653,9 @@ struct AboutDialog::Impl {
                 reinterpret_cast<update_service::UpdateCheckResult*>(lp));
             if (!result || result->requestId != activeRequest)
                 return 0;
-            runtime_log::writef(L"[action][update] check-result state=%s version=%s source=%s",
+            runtime_log::writef(L"[action][update] check-result state=%s version=%s",
                                 update_service::updateStateName(result->state),
-                                result->version.c_str(),
-                                update_service::updateSourceName(updateSource));
+                                result->version.c_str());
             const bool shouldDownloadAfterCheck = downloadAfterCheck;
             downloadAfterCheck = false;
             checking = false;
@@ -824,7 +672,7 @@ struct AboutDialog::Impl {
             const std::wstring visibleVersion = update_service::displayVersion(result->version);
             if (result->state == update_service::UpdateState::Available) {
                 releaseUrl = result->releaseUrl.empty()
-                                 ? update_service::updateSourceReleasePage(updateSource)
+                                 ? app_info::kLatestReleasePage
                                  : result->releaseUrl;
                 if (latestRelease && !latestRelease->installerUrl.empty()) {
                     statusText = L"发现新版本：" + visibleVersion + L"，点击“下载更新”";
@@ -837,12 +685,12 @@ struct AboutDialog::Impl {
                 latestText = L"最新版本：" + visibleVersion;
             } else if (result->state == update_service::UpdateState::Current) {
                 releaseUrl = result->releaseUrl.empty()
-                                 ? update_service::updateSourceReleasePage(updateSource)
+                                 ? app_info::kLatestReleasePage
                                  : result->releaseUrl;
                 statusText = L"当前已是最新版本";
                 latestText = L"当前正式版本：" + visibleVersion;
             } else {
-                releaseUrl = update_service::updateSourceReleasePage(updateSource);
+                releaseUrl = app_info::kLatestReleasePage;
                 statusText = result->detail;
                 latestText.clear();
             }
@@ -898,7 +746,6 @@ struct AboutDialog::Impl {
             discardPendingUpdateResults(hwnd);
             discardPendingDownloadMessages(hwnd);
             githubIconGeometry.Reset();
-            giteeIconGeometry.Reset();
             surface.discard();
             hwnd = nullptr;
             if (notifyHwnd)
@@ -943,17 +790,13 @@ struct AboutDialog::Impl {
         versionRect = D2D1::RectF(contentX, cardY + 14.0f, contentX + contentW,
                                    cardY + 36.0f);
         const float projectW = 84.0f;
-        const float projectGap = 8.0f;
         projectRect = D2D1::RectF(contentX, cardY + 54.0f, contentX + projectW,
                                   cardY + 86.0f);
-        giteeProjectRect = D2D1::RectF(contentX + projectW + projectGap, cardY + 54.0f,
-                                       contentX + projectW + projectGap + projectW,
-                                       cardY + 86.0f);
 
         const float switchW = 40.0f;
         const float switchH = 20.0f;
         const float switchX = w - pad - 16.0f - switchW;
-        const float autoCheckLabelLeft = giteeProjectRect.right + 12.0f;
+        const float autoCheckLabelLeft = projectRect.right + 12.0f;
         autoCheckLabelRect = D2D1::RectF(
             autoCheckLabelLeft, cardY + 60.0f,
             std::max(autoCheckLabelLeft + 20.0f, switchX - 8.0f), cardY + 80.0f);
@@ -980,29 +823,15 @@ struct AboutDialog::Impl {
         const float latestY = btnY - gap - latestH;
         const float statusY = latestY - statusH;
         const float notesBottom = statusY - gap;
-        const float sourceLabelW = 56.0f;
-        const float sourceOptionW = 72.0f;
-        const float sourceGap = 8.0f;
-        const float sourceGroupW = sourceLabelW + sourceGap + sourceOptionW + sourceGap +
-                                   sourceOptionW;
-        const float sourceX = std::max(pad, w - pad - sourceGroupW);
         const float tabW = 74.0f;
         const float tabGap = 6.0f;
         releaseNotesTabRect = D2D1::RectF(pad, releaseTitleY,
-                                          std::min(pad + tabW, std::max(pad, sourceX - gap)),
+                                          std::min(pad + tabW, w - pad),
                                           releaseTitleY + tabH);
         const float disclaimerX = releaseNotesTabRect.right + tabGap;
         disclaimerTabRect = D2D1::RectF(disclaimerX, releaseTitleY,
-                                        std::min(disclaimerX + tabW, std::max(disclaimerX, sourceX - gap)),
+                                        std::min(disclaimerX + tabW, w - pad),
                                         releaseTitleY + tabH);
-        updateSourceLabelRect = D2D1::RectF(sourceX, releaseTitleY, sourceX + sourceLabelW,
-                                            releaseTitleY + tabH);
-        const float githubX = sourceX + sourceLabelW + sourceGap;
-        githubSourceRect = D2D1::RectF(githubX, releaseTitleY, githubX + sourceOptionW,
-                                       releaseTitleY + tabH);
-        const float giteeX = githubX + sourceOptionW + sourceGap;
-        giteeSourceRect = D2D1::RectF(giteeX, releaseTitleY, giteeX + sourceOptionW,
-                                      releaseTitleY + tabH);
         notesRect = D2D1::RectF(pad, notesY, std::max(pad, w - pad),
                                 std::max(notesY + 80.0f, notesBottom));
         statusRect = D2D1::RectF(pad, statusY, std::max(pad, w - pad), statusY + statusH);
@@ -1010,8 +839,7 @@ struct AboutDialog::Impl {
         fluent::offsetDialogRects(content.offsetX, {
             &autoSwitchRect, &titleRect, &subtitleRect, &infoCardRect,
             &versionRect, &autoCheckLabelRect, &releaseNotesTabRect, &disclaimerTabRect,
-            &statusRect, &latestRect, &projectRect, &giteeProjectRect, &updateSourceLabelRect,
-            &githubSourceRect, &giteeSourceRect, &checkRect, &releaseRect,
+            &statusRect, &latestRect, &projectRect, &checkRect, &releaseRect,
             &closeRect, &notesRect});
 
     }
@@ -1045,9 +873,8 @@ struct AboutDialog::Impl {
         statusText = L"正在准备下载更新安装器…";
         activeRequest = update_service::nextRequestId();
         downloadCancel = std::make_shared<std::atomic_bool>(false);
-        runtime_log::writef(L"[action][update] download-start source=%s version=%s url=%s "
+        runtime_log::writef(L"[action][update] download-start version=%s url=%s "
                             L"size=%llu output=%s",
-                            update_service::updateSourceName(updateSource),
                             latestRelease->version.c_str(),
                             latestRelease->installerUrl.c_str(),
                             static_cast<unsigned long long>(latestRelease->installerSize),
@@ -1072,7 +899,7 @@ struct AboutDialog::Impl {
         };
         update_service::downloadInstaller(
             latestRelease->installerUrl, outputPath, latestRelease->installerSize,
-            update_service::updateSourceName(updateSource), downloadCancel, std::move(callbacks));
+            L"GitHub", downloadCancel, std::move(callbacks));
         surface.invalidate();
     }
 
@@ -1106,17 +933,15 @@ struct AboutDialog::Impl {
         releaseButtonAccent = false;
         releaseButtonText = L"无可用更新";
         activeRequest = update_service::nextRequestId();
-        releaseUrl = update_service::updateSourceReleasePage(updateSource);
+        releaseUrl = app_info::kLatestReleasePage;
         // 打开瞬间只保留一处即时反馈；旧结果（更新日志/版本标签/按钮高亮）
         // 留到 kMsgUpdateReady 统一刷新。
-        statusText = L"正在检查" +
-                     std::wstring(update_service::updateSourceName(updateSource)) + L"更新…";
-        runtime_log::writef(L"[action][update] check-start source=%s request=%llu",
-                            update_service::updateSourceName(updateSource),
+        statusText = L"正在检查 GitHub 更新…";
+        runtime_log::writef(L"[action][update] check-start request=%llu",
                             static_cast<unsigned long long>(activeRequest));
         HWND target = hwnd;
         update_service::requestLatestRelease(
-            activeRequest, updateSource, [target](update_service::UpdateCheckResult result) {
+            activeRequest, [target](update_service::UpdateCheckResult result) {
                 auto* payload = new update_service::UpdateCheckResult(std::move(result));
                 if (!PostMessageW(target, kMsgUpdateReady, 0, reinterpret_cast<LPARAM>(payload)))
                     delete payload;
@@ -1146,18 +971,13 @@ AboutDialog::~AboutDialog() {
 }
 
 bool AboutDialog::create(HINSTANCE inst, HWND parent, bool autoCheckOnStartup,
-                         bool useGiteeUpdateSource,
                          std::function<void(bool)> onAutoCheckChanged,
-                         std::function<void(bool)> onUpdateSourceChanged,
                          std::function<bool(const std::wstring&)> onInstallUpdate,
                          StartupUpdateCheck* startupCheck) {
     impl_->notifyHwnd = parent; // 仅用于关闭通知；托盘窗口不能作为普通窗口的可见所有者。
     impl_->inst = inst;
     impl_->autoCheckOnStartup = autoCheckOnStartup;
-    impl_->updateSource = useGiteeUpdateSource ? update_service::UpdateSource::Gitee
-                                               : update_service::UpdateSource::GitHub;
     impl_->onAutoCheckChanged = std::move(onAutoCheckChanged);
-    impl_->onUpdateSourceChanged = std::move(onUpdateSourceChanged);
     impl_->onInstallUpdate = std::move(onInstallUpdate);
     impl_->downloadAfterCheck = false;
     impl_->checking = false;
@@ -1170,7 +990,7 @@ bool AboutDialog::create(HINSTANCE inst, HWND parent, bool autoCheckOnStartup,
     impl_->releaseButtonAccent = false;
     impl_->releaseButtonText = L"无可用更新";
     impl_->activeRequest = update_service::nextRequestId();
-    impl_->releaseUrl = update_service::updateSourceReleasePage(impl_->updateSource);
+    impl_->releaseUrl = app_info::kLatestReleasePage;
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
@@ -1204,7 +1024,7 @@ bool AboutDialog::create(HINSTANCE inst, HWND parent, bool autoCheckOnStartup,
 
     // 弹窗触发下载时复用启动检查结果；界面仍只在用户打开时创建。
     if (startupCheck) {
-        if (auto available = startupCheck->takeAvailableResult(impl_->updateSource)) {
+        if (auto available = startupCheck->takeAvailableResult()) {
             impl_->activeRequest = available->requestId;
             auto result = std::make_unique<update_service::UpdateCheckResult>(std::move(*available));
             impl_->handle(kMsgUpdateReady, 0, reinterpret_cast<LPARAM>(result.release()));
