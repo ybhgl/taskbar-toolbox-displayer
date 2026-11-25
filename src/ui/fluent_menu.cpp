@@ -28,9 +28,6 @@ constexpr float kIconSize = 16.0f;
 constexpr float kIconTextGap = 10.0f;
 constexpr float kGutter = kIconLeft + kIconSize + kIconTextGap;
 
-float itemTextLeft(const FluentMenuItem& item) {
-    return (item.nativeIcon || item.icon != settings_icon::Kind::None) ? kGutter : kIconLeft;
-}
 constexpr float kCheckRightPad = 28.0f;
 constexpr float kSubmenuCheckRightPad = 48.0f;
 constexpr float kMultiCheckBoxSize = 16.0f;
@@ -38,8 +35,19 @@ constexpr float kMultiCheckRightInset = 16.0f;
 constexpr float kMultiCheckSpace = kMultiCheckRightInset + kMultiCheckBoxSize + 10.0f;
 constexpr float kRightPad = 36.0f;
 constexpr float kRightTextGap = 24.0f;
+// 可排序行：勾选框固定行首，行尾预留拖拽热区，文字区夹在两者之间。
+constexpr float kDragHandleWidth = 34.0f;
+constexpr float kDragTextLeft = kIconLeft + kMultiCheckBoxSize + kIconTextGap;
+
+float itemTextLeft(const FluentMenuItem& item) {
+    if (item.dragHandle)
+        return kDragTextLeft;
+    return (item.nativeIcon || item.icon != settings_icon::Kind::None) ? kGutter : kIconLeft;
+}
 
 float itemStateSpace(const FluentMenuItem& item) {
+    if (item.dragHandle)
+        return kDragHandleWidth;
     if (item.keepOpen)
         return kMultiCheckSpace;
     return item.checked
@@ -66,6 +74,13 @@ struct MenuWnd {
     int parentRow = -1;
     MenuWnd* child = nullptr;
     FluentMenu::Callback cb; // 仅根菜单持有
+    FluentMenu::ReorderCallback reorderCb; // 仅根菜单持有
+    // 行尾手柄拖拽排序：只记录被拖行、指针位置与落位槽位，不改动勾选状态。
+    bool dragging = false;
+    int dragRow = -1;
+    int dragTarget = -1;
+    float dragPointerY = 0.0f;
+    float dragGrabDy = 0.0f;
     BitmapRenderer renderer;
     ID2D1SolidColorBrush* brush = nullptr;
     IDWriteTextFormat* fmt = nullptr;
@@ -312,20 +327,28 @@ struct MenuWnd {
                 y += kSepH;
                 continue;
             }
-            bool hov = i == hover && it.enabled;
-            if (hov || (it.checked && it.enabled)) {
-                auto fill = hov ? p.listHover : p.accent;
-                if (!hov)
+            const bool floating = dragging && i == dragRow;
+            const float rowTop =
+                floating ? std::clamp(dragPointerY - dragGrabDy, kPadY,
+                                      std::max(kPadY, heightDip() - kPadY - kItemH))
+                         : y;
+            bool hov = i == hover && it.enabled && !floating;
+            if (floating || hov || (it.checked && it.enabled)) {
+                auto fill = (floating || hov) ? p.listHover : p.accent;
+                if (!hov && !floating)
                     fill.a = 0.07f;
                 brush->SetColor(fill);
                 rt->FillRoundedRectangle(
-                    D2D1::RoundedRect(D2D1::RectF(kPadX, y + 2.0f, wDip - kPadX, y + kItemH - 2.0f),
-                                      kItemRadius, kItemRadius),
+                    D2D1::RoundedRect(
+                        D2D1::RectF(kPadX, rowTop + 2.0f, wDip - kPadX, rowTop + kItemH - 2.0f),
+                        kItemRadius, kItemRadius),
                     brush);
             }
             if (it.keepOpen) {
-                const float boxLeft = wDip - kMultiCheckRightInset - kMultiCheckBoxSize;
-                const float boxTop = y + (kItemH - kMultiCheckBoxSize) * 0.5f;
+                const float boxLeft = it.dragHandle
+                                          ? kIconLeft
+                                          : wDip - kMultiCheckRightInset - kMultiCheckBoxSize;
+                const float boxTop = rowTop + (kItemH - kMultiCheckBoxSize) * 0.5f;
                 const D2D1_ROUNDED_RECT boxRect = D2D1::RoundedRect(
                     D2D1::RectF(boxLeft, boxTop, boxLeft + kMultiCheckBoxSize,
                                 boxTop + kMultiCheckBoxSize),
@@ -348,12 +371,12 @@ struct MenuWnd {
                 const float checkRightPad = it.submenu.empty() ? kCheckRightPad
                                                                 : kSubmenuCheckRightPad;
                 const float cx = wDip - checkRightPad;
-                const float cy = y + kItemH / 2.0f;
+                const float cy = rowTop + kItemH / 2.0f;
                 rt->DrawLine(D2D1::Point2F(cx, cy), D2D1::Point2F(cx + 3.5f, cy + 3.5f), brush, 1.6f);
                 rt->DrawLine(D2D1::Point2F(cx + 3.5f, cy + 3.5f), D2D1::Point2F(cx + 9.0f, cy - 4.0f),
                              brush, 1.6f);
             }
-            const float iconTop = y + (kItemH - kIconSize) * 0.5f;
+            const float iconTop = rowTop + (kItemH - kIconSize) * 0.5f;
             const D2D1_RECT_F iconRect =
                 D2D1::RectF(kIconLeft, iconTop, kIconLeft + kIconSize,
                             iconTop + kIconSize);
@@ -374,19 +397,45 @@ struct MenuWnd {
             if (text.detail) {
                 const float detailLeft = labelRight - text.detailWidth;
                 brush->SetColor(it.enabled ? p.textSecondary : p.disabled);
-                rt->DrawTextLayout(D2D1::Point2F(detailLeft, y), text.detail.Get(), brush);
+                rt->DrawTextLayout(D2D1::Point2F(detailLeft, rowTop), text.detail.Get(), brush);
             }
             brush->SetColor(it.enabled ? p.text : p.disabled);
             if (text.label)
-                rt->DrawTextLayout(D2D1::Point2F(itemTextLeft(it), y), text.label.Get(), brush);
+                rt->DrawTextLayout(D2D1::Point2F(itemTextLeft(it), rowTop), text.label.Get(),
+                                   brush);
             if (!it.submenu.empty()) {
                 // 子菜单箭头
                 brush->SetColor(it.enabled ? p.textSecondary : p.disabled);
-                float ax = wDip - 22.0f, ay = y + kItemH / 2.0f;
+                float ax = wDip - 22.0f, ay = rowTop + kItemH / 2.0f;
                 rt->DrawLine(D2D1::Point2F(ax, ay - 4.0f), D2D1::Point2F(ax + 3.5f, ay), brush, 1.4f);
                 rt->DrawLine(D2D1::Point2F(ax + 3.5f, ay), D2D1::Point2F(ax, ay + 4.0f), brush, 1.4f);
             }
+            if (it.dragHandle) {
+                // 拖拽手柄：两列三点的抓取纹理，热区覆盖整行行尾。
+                brush->SetColor(it.enabled ? (hov ? p.text : p.textSecondary) : p.disabled);
+                const float cx = wDip - kDragHandleWidth * 0.5f;
+                const float cy = rowTop + kItemH / 2.0f;
+                for (int col = 0; col < 2; ++col) {
+                    for (int dot = 0; dot < 3; ++dot) {
+                        const float dx = cx + (col == 0 ? -2.0f : 2.0f);
+                        const float dy = cy + (dot - 1) * 4.2f;
+                        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dx, dy), 1.15f, 1.15f),
+                                        brush);
+                    }
+                }
+            }
             y += kItemH;
+        }
+
+        // 拖拽中：在落位槽画插入指示线，明确松手后的新位置。
+        if (dragging && dragRow >= 0 && dragRow < static_cast<int>(items.size())) {
+            const float lineY = kPadY + static_cast<float>(dragTarget) * kItemH;
+            brush->SetColor(p.accent);
+            rt->FillRoundedRectangle(
+                D2D1::RoundedRect(
+                    D2D1::RectF(kPadX + 4.0f, lineY - 1.2f, wDip - kPadX - 4.0f, lineY + 1.2f),
+                    1.2f, 1.2f),
+                brush);
         }
 
         HRESULT hr = rt->EndDraw();
@@ -480,13 +529,16 @@ void MenuWnd::closeAll() {
 
 // 创建一级菜单窗口（根或子菜单）
 MenuWnd* createMenuLevel(HWND owner, MenuWnd* parent, std::vector<FluentMenuItem> items,
-                         const FluentMenu::Callback* cb, POINT screenPt, bool animate = true) {
+                         const FluentMenu::Callback* cb, POINT screenPt, bool animate = true,
+                         const FluentMenu::ReorderCallback* reorder = nullptr) {
     auto* mw = new MenuWnd();
     mw->parent = parent;
     mw->parentRow = parent ? parent->hover : -1;
     mw->items = std::move(items);
     if (cb)
         mw->cb = *cb;
+    if (reorder)
+        mw->reorderCb = *reorder;
 
     mw->renderer.initialize();
     float wDip = kMinWidth;
@@ -635,7 +687,34 @@ LRESULT MenuWnd::handleMsg(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_ERASEBKGND:
         return 1;
+    case WM_SETCURSOR:
+        // 悬停在行尾拖拽手柄上时提示可上下拖动，其余区域保持箭头。
+        if (LOWORD(lp) == HTCLIENT) {
+            POINT pt{};
+            GetCursorPos(&pt);
+            ScreenToClient(h, &pt);
+            const float s = dipScale(GetDpiForWindow(h));
+            RECT rc{};
+            GetClientRect(h, &rc);
+            const int row = dragging ? dragRow : rowAt(pt.y / s);
+            if (row >= 0 && row < static_cast<int>(items.size()) && items[row].dragHandle &&
+                (dragging || pt.x / s >= rc.right / s - kDragHandleWidth)) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
+                return TRUE;
+            }
+        }
+        break;
     case WM_MOUSEMOVE: {
+        if (dragging) {
+            const float s = dipScale(GetDpiForWindow(h));
+            dragPointerY = GET_Y_LPARAM(lp) / s;
+            const int count = static_cast<int>(items.size());
+            const int slot = static_cast<int>(
+                std::floor((dragPointerY - kPadY) / kItemH + 0.5f));
+            dragTarget = std::clamp(slot, 0, std::max(0, count - 1));
+            render();
+            return 0;
+        }
         int row = rowAt(dipY(lp));
         if (!selectable(row))
             row = -1;
@@ -656,6 +735,8 @@ LRESULT MenuWnd::handleMsg(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_MOUSELEAVE:
+        if (dragging)
+            return 0; // 拖拽期间指针离开窗口仍由 SetCapture 继续跟踪，不重置悬停行
         if (hover != -1) {
             hover = -1;
             KillTimer(hwnd, kTimerSubmenu);
@@ -674,7 +755,65 @@ LRESULT MenuWnd::handleMsg(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             render();
         }
         return 0;
+    case WM_LBUTTONDOWN: {
+        if (closing)
+            return 0;
+        const float s = dipScale(GetDpiForWindow(h));
+        const float xDip = GET_X_LPARAM(lp) / s;
+        const int row = rowAt(GET_Y_LPARAM(lp) / s);
+        if (!selectable(row) || !items[row].dragHandle)
+            return 0;
+        RECT rc{};
+        GetClientRect(h, &rc);
+        const float wDip = rc.right / s;
+        if (xDip < wDip - kDragHandleWidth)
+            return 0; // 手柄之外按下仍按普通点击处理，抬手时切换勾选
+        dragging = true;
+        dragRow = row;
+        dragTarget = row;
+        dragPointerY = GET_Y_LPARAM(lp) / s;
+        dragGrabDy = dragPointerY - rowY(row);
+        hover = row;
+        SetCapture(h);
+        render();
+        return 0;
+    }
+    case WM_CAPTURECHANGED:
+        if (dragging) {
+            dragging = false;
+            dragRow = -1;
+            dragTarget = -1;
+            render();
+        }
+        return 0;
     case WM_LBUTTONUP: {
+        if (dragging) {
+            dragging = false;
+            if (GetCapture() == h)
+                ReleaseCapture();
+            const int from = dragRow;
+            const int to = dragTarget;
+            dragRow = -1;
+            dragTarget = -1;
+            if (from >= 0 && to >= 0 && from != to &&
+                from < static_cast<int>(items.size())) {
+                const int movedId = items[from].id;
+                FluentMenuItem moved = std::move(items[from]);
+                items.erase(items.begin() + from);
+                items.insert(items.begin() + std::min(to, static_cast<int>(items.size())),
+                             std::move(moved));
+                rowText.clear();
+                textWidthDip = 0.0f;
+                releaseNativeIconBitmaps(); // 位图按行索引缓存，重排后需按新顺序重建
+                hover = to;
+                render();
+                if (reorderCb)
+                    reorderCb(movedId, to);
+            } else {
+                render();
+            }
+            return 0;
+        }
         int row = rowAt(dipY(lp));
         if (!selectable(row))
             return 0;
@@ -833,9 +972,11 @@ void MenuWnd::openSubmenu(bool animate) {
     }
 }
 
-void FluentMenu::show(HWND owner, POINT screenPt, std::vector<FluentMenuItem> items, Callback cb) {
+void FluentMenu::show(HWND owner, POINT screenPt, std::vector<FluentMenuItem> items, Callback cb,
+                      ReorderCallback reorder) {
     dismiss();
-    g_root = createMenuLevel(owner, nullptr, std::move(items), &cb, screenPt);
+    g_root = createMenuLevel(owner, nullptr, std::move(items), &cb, screenPt, true,
+                             reorder ? &reorder : nullptr);
     if (g_root && g_root->hwnd) {
         HWND rootHwnd = g_root->hwnd;
         SetForegroundWindow(rootHwnd);

@@ -376,29 +376,42 @@ TEST_CASE("dock_resource_order.reorder_persist_and_invalid_fallback") {
     const int memory = static_cast<int>(DockResourceMetric::Memory);
     const int upload = static_cast<int>(DockResourceMetric::Upload);
     const int download = static_cast<int>(DockResourceMetric::Download);
+    const int frequency = static_cast<int>(DockResourceMetric::CpuFrequency);
+    const int gpu = static_cast<int>(DockResourceMetric::Gpu);
 
     DockResourceOrder order = defaultDockResourceOrder();
     EXPECT_TRUE(isValidDockResourceOrder(order));
-    order = reorderedDockResourceOrder(order, download, DockResourceReorder::MoveFirst);
-    EXPECT_EQ(order[0], download);
-    EXPECT_EQ(order[1], cpu);
-    order = reorderedDockResourceOrder(order, cpu, DockResourceReorder::MoveLast);
-    EXPECT_EQ(order.back(), cpu);
-    order = reorderedDockResourceOrder(order, memory, DockResourceReorder::MoveDown);
-    EXPECT_EQ(order[1], upload);
-    EXPECT_EQ(order[2], memory);
+    // 拖到首位
+    order = movedDockResourceOrder(order, download, 0);
+    EXPECT_EQ(order, (DockResourceOrder{download, cpu, memory, upload, gpu, frequency}));
+    // 拖到末位
+    order = movedDockResourceOrder(order, cpu, 5);
+    EXPECT_EQ(order, (DockResourceOrder{download, memory, upload, gpu, frequency, cpu}));
+    // 向后拖（当前位置小于目标位）
+    order = movedDockResourceOrder(order, memory, 4);
+    EXPECT_EQ(order, (DockResourceOrder{download, upload, gpu, frequency, memory, cpu}));
+    // 向前拖（当前位置大于目标位）
+    order = movedDockResourceOrder(order, frequency, 0);
+    EXPECT_EQ(order, (DockResourceOrder{frequency, download, upload, gpu, memory, cpu}));
+    EXPECT_TRUE(isValidDockResourceOrder(order));
+    // 落在原位不动
+    EXPECT_EQ(movedDockResourceOrder(order, frequency, 0), order);
+    // 越界目标位收敛到末位
+    EXPECT_EQ(movedDockResourceOrder(defaultDockResourceOrder(), cpu, 99),
+              (DockResourceOrder{memory, upload, download, gpu, frequency, cpu}));
+    EXPECT_EQ(movedDockResourceOrder(defaultDockResourceOrder(), cpu, -3),
+              defaultDockResourceOrder());
 
     DockResourceOrder invalid{0, 0, 1, 2, 3, 4};
     EXPECT_FALSE(isValidDockResourceOrder(invalid));
-    EXPECT_EQ(reorderedDockResourceOrder(invalid, cpu, DockResourceReorder::MoveUp),
-              defaultDockResourceOrder());
+    EXPECT_EQ(movedDockResourceOrder(invalid, cpu, 2), defaultDockResourceOrder());
 
     AppSettings settings;
     settings.dockResourceOrder_ = order;
     const auto profile = settings.defaultMonitorTaskbarSettings(L"ORDER-DISPLAY", true);
     EXPECT_EQ(profile.dockResourceOrder, order);
     auto& monitor = settings.ensureMonitorTaskbarSettings(L"ORDER-DISPLAY", true);
-    monitor.dockResourceOrder = reorderedDockResourceOrder(order, cpu, DockResourceReorder::MoveFirst);
+    monitor.dockResourceOrder = movedDockResourceOrder(order, download, 0);
 
     bool migrateLog = false;
     const nlohmann::json dumped = settings.toJson();

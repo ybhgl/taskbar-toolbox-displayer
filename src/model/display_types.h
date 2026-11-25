@@ -154,35 +154,25 @@ inline bool isValidDockResourceOrder(const DockResourceOrder& order) {
     return true;
 }
 
-enum class DockResourceReorder { MoveUp = 0, MoveDown = 1, MoveFirst = 2, MoveLast = 3 };
-
-inline DockResourceOrder reorderedDockResourceOrder(const DockResourceOrder& order, int metric,
-                                                    DockResourceReorder operation) {
+// 拖动排序：把 metric 从当前位置取出并插入到 targetIndex（0 起，越界自动收敛到首末位）。
+inline DockResourceOrder movedDockResourceOrder(const DockResourceOrder& order, int metric,
+                                                int targetIndex) {
     DockResourceOrder next = order;
     if (!isValidDockResourceOrder(next) || metric < 0 ||
         metric >= static_cast<int>(kDockResourceMetricCount))
         return defaultDockResourceOrder();
     const auto found = std::find(next.begin(), next.end(), metric);
-    const size_t current = static_cast<size_t>(found - next.begin());
     if (found == next.end())
         return next;
-
-    switch (operation) {
-    case DockResourceReorder::MoveUp:
-        if (current > 0)
-            std::swap(next[current], next[current - 1]);
-        break;
-    case DockResourceReorder::MoveDown:
-        if (current + 1 < next.size())
-            std::swap(next[current], next[current + 1]);
-        break;
-    case DockResourceReorder::MoveFirst:
-        std::rotate(next.begin(), next.begin() + current, next.begin() + current + 1);
-        break;
-    case DockResourceReorder::MoveLast:
-        std::rotate(next.begin() + current, next.begin() + current + 1, next.end());
-        break;
-    }
+    const size_t current = static_cast<size_t>(found - next.begin());
+    const size_t target = static_cast<size_t>(std::clamp(
+        targetIndex, 0, static_cast<int>(kDockResourceMetricCount) - 1));
+    if (target == current)
+        return next;
+    if (target < current)
+        std::rotate(next.begin() + target, next.begin() + current, next.begin() + current + 1);
+    else
+        std::rotate(next.begin() + current, next.begin() + current + 1, next.begin() + target + 1);
     return next;
 }
 
