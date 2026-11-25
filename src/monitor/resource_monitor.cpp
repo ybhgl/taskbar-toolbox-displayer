@@ -51,29 +51,66 @@ bool readNetworkTotals(uint64_t& received, uint64_t& sent, uint64_t& interfaceIn
     // 0x08080808 已是 8.8.8.8 的网络字节序，无需额外链接 ws2_32 的转换函数。
     destination.sin_addr.s_addr = 0x08080808u;
     DWORD bestIndex = 0;
-    if (GetBestInterfaceEx(reinterpret_cast<sockaddr*>(&destination), &bestIndex) != NO_ERROR ||
-        bestIndex == 0)
-        return false;
+    const bool haveDefaultRoute =
+        GetBestInterfaceEx(reinterpret_cast<sockaddr*>(&destination), &bestIndex) == NO_ERROR &&
+        bestIndex != 0;
 
     MIB_IF_TABLE2* table = nullptr;
     if (GetIfTable2(&table) != NO_ERROR || !table)
         return false;
 
-    bool found = false;
-    for (ULONG i = 0; i < table->NumEntries; ++i) {
-        const MIB_IF_ROW2& row = table->Table[i];
-        // 出口已被唯一确定，隧道/VPN 若被选中就应计入；仅排除本机回环。
-        if (row.InterfaceIndex != bestIndex || row.OperStatus != IfOperStatusUp ||
-            row.Type == IF_TYPE_SOFTWARE_LOOPBACK)
-            continue;
-        received = row.InOctets;
-        sent = row.OutOctets;
-        interfaceIndex = bestIndex;
-        found = true;
-        break;
+    // 代理/VPN 的 TUN 适配器（IF_TYPE_PROP_VIRTUAL，HardwareInterface=false）会把同一条
+    // 代理流量的收发都累加进自己的计数器，直接采样会让上行读数与下行几乎相同；NDIS 过滤
+    // 驱动的伪接口又与真实网卡计数完全重复。因此只认物理网卡，天然排除这两类。
+    const auto isPhysicalNic = [](const MIB_IF_ROW2& row) {
+        return row.OperStatus == IfOperStatusUp && row.Type != IF_TYPE_SOFTWARE_LOOPBACK &&
+               row.InterfaceAndOperStatusFlags.HardwareInterface;
+    };
+
+    const MIB_IF_ROW2* picked = nullptr;
+    if (haveDefaultRoute) {
+        for (ULONG i = 0; i < table->NumEntries; ++i) {
+            const MIB_IF_ROW2& row = table->Table[i];
+            if (row.InterfaceIndex == bestIndex && isPhysicalNic(row)) {
+                picked = &row;
+                break;
+            }
+        }
+    }
+    if (!picked) {
+        // 出口被 TUN 接管（例如系统代理全量走 TUN）时，改取累计流量最大的物理网卡：
+        // 多网卡场景下它才是真正承载业务的那块，且不会把过滤驱动的重复计数叠加进来。
+        uint64_t mostTraffic = 0;
+        for (ULONG i = 0; i < table->NumEntries; ++i) {
+            const MIB_IF_ROW2& row = table->Table[i];
+            if (!isPhysicalNic(row))
+                continue;
+            const uint64_t traffic = row.InOctets + row.OutOctets;
+            if (!picked || traffic > mostTraffic) {
+                picked = &row;
+                mostTraffic = traffic;
+            }
+        }
+    }
+    if (!picked && haveDefaultRoute) {
+        // 虚拟机等没有物理网卡的场景退回默认出口本身，仍排除回环。
+        for (ULONG i = 0; i < table->NumEntries; ++i) {
+            const MIB_IF_ROW2& row = table->Table[i];
+            if (row.InterfaceIndex != bestIndex || row.OperStatus != IfOperStatusUp ||
+                row.Type == IF_TYPE_SOFTWARE_LOOPBACK)
+                continue;
+            picked = &row;
+            break;
+        }
+    }
+
+    if (picked) {
+        received = picked->InOctets;
+        sent = picked->OutOctets;
+        interfaceIndex = picked->InterfaceIndex;
     }
     FreeMibTable(table);
-    return found;
+    return picked != nullptr;
 }
 
 } // namespace
