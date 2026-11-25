@@ -173,6 +173,7 @@ struct SettingsActions {
     std::function<void(bool)> onDockResourceDownload;
     std::function<void(bool)> onDockResourceUpload;
     std::function<void(bool)> onDockResourceCpuFrequency;
+    // (监控项标识, 拖拽落位后的行号)
     std::function<void(int, int)> onDockResourceReorder;
     std::function<void(bool)> onSpectrum;
     std::function<void(int)> onSpectrumStyle;

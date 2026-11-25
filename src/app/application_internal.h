@@ -446,7 +446,7 @@ private:
 
     void applyDockResourcePlacement(int placement);
 
-    void applyDockResourceReorder(int metric, int operation);
+    void applyDockResourceReorder(int metric, int targetIndex);
 
     bool isRenderMode(RenderMode mode) const;
 

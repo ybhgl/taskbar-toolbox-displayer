@@ -457,15 +457,15 @@ void SettingsSections::onCommand(int id, int option) {
         }
         break;
     case kIdDockResourceReorder: {
-        if (option < 0 || option >= kDockResourceMetricCount * kDockResourceReorderOps)
+        if (option < 0 || option >= kDockResourceMetricCount * kDockResourceMetricCount)
             break;
-        const int metric = option / kDockResourceReorderOps;
-        const int operation = option % kDockResourceReorderOps;
-        state.dockResourceOrder = reorderedDockResourceOrder(
-            state.dockResourceOrder, metric, static_cast<DockResourceReorder>(operation));
+        const int metric = option / kDockResourceMetricCount;
+        const int targetIndex = option % kDockResourceMetricCount;
+        state.dockResourceOrder =
+            movedDockResourceOrder(state.dockResourceOrder, metric, targetIndex);
         updateImmersiveRowsEnabled();
         if (actions.onDockResourceReorder)
-            actions.onDockResourceReorder(metric, operation);
+            actions.onDockResourceReorder(metric, targetIndex);
         break;
     }
     case kIdDockResourcePlacement:

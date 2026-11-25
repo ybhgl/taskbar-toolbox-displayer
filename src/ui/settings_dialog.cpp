@@ -177,9 +177,6 @@ struct SettingsDialog::Impl {
             L"CPU: 12%",      L"内存: 48%",  L"上行: 120KB/s",
             L"下行: 2.4MB/s", L"GPU: 7%",    L"频率: 3.6GHz",
         };
-        static constexpr const wchar_t* kReorderLabels[kDockResourceReorderOps] = {
-            L"上移", L"下移", L"移到首位", L"移到末位",
-        };
         const DockResourceOrder order = isValidDockResourceOrder(s.dockResourceOrder)
                                             ? s.dockResourceOrder
                                             : defaultDockResourceOrder();
@@ -190,20 +187,11 @@ struct SettingsDialog::Impl {
             fluent::FluentMenuItem item;
             item.id = metric;
             item.text = kLabels[metric];
-            item.rightText = std::wstring(kExamples[metric]) + L" · 第 " +
-                             std::to_wstring(position + 1) + L" 位";
+            item.rightText = kExamples[metric];
             item.checked = checked[metric];
+            // 行首勾选框负责显隐，行尾手柄负责排序，两个热区互不重叠。
             item.keepOpen = true;
-            const bool first = position == 0;
-            const bool last = position + 1 == settings_ui::kDockResourceMetricCount;
-            const bool noOp[kDockResourceReorderOps] = {first, last, first, last};
-            for (int op = 0; op < kDockResourceReorderOps; ++op) {
-                fluent::FluentMenuItem reorder;
-                reorder.id = kDockResourceReorderMenuBase + metric * kDockResourceReorderOps + op;
-                reorder.text = kReorderLabels[op];
-                reorder.enabled = !noOp[op];
-                item.submenu.push_back(std::move(reorder));
-            }
+            item.dragHandle = true;
             items.push_back(std::move(item));
         }
 
@@ -217,18 +205,20 @@ struct SettingsDialog::Impl {
             GetCursorPos(&anchor);
         }
 
-        fluent::FluentMenu::show(hwnd, anchor, std::move(items), [this](int id) {
-            if (!hwnd || !IsWindow(hwnd))
-                return;
-            if (id >= kDockResourceReorderMenuBase &&
-                id < kDockResourceReorderMenuBase +
-                         settings_ui::kDockResourceMetricCount * kDockResourceReorderOps) {
-                onCommand(kIdDockResourceReorder, id - kDockResourceReorderMenuBase);
-                return;
-            }
-            if (id >= 0 && id < static_cast<int>(settings_ui::kDockResourceMetricCount))
-                onCommand(kIdDockResourceMetrics, id);
-        });
+        fluent::FluentMenu::show(
+            hwnd, anchor, std::move(items),
+            [this](int id) {
+                if (!hwnd || !IsWindow(hwnd))
+                    return;
+                if (id >= 0 && id < static_cast<int>(settings_ui::kDockResourceMetricCount))
+                    onCommand(kIdDockResourceMetrics, id);
+            },
+            [this](int id, int targetIndex) {
+                if (!hwnd || !IsWindow(hwnd))
+                    return;
+                onCommand(kIdDockResourceReorder,
+                          id * settings_ui::kDockResourceMetricCount + targetIndex);
+            });
     }
 
     void onCommand(int id, int option = -1) {

@@ -437,19 +437,20 @@ void App::applyDockResourcePlacement(int placement) {
     saveSettings();
 }
 
-void App::applyDockResourceReorder(int metric, int operation) {
-    if (metric < 0 || metric >= static_cast<int>(kDockResourceMetricCount) || operation < 0 ||
-        operation > static_cast<int>(DockResourceReorder::MoveLast))
+void App::applyDockResourceReorder(int metric, int targetIndex) {
+    if (metric < 0 || metric >= static_cast<int>(kDockResourceMetricCount) || targetIndex < 0 ||
+        targetIndex >= static_cast<int>(kDockResourceMetricCount))
         return;
     const auto displays = enumerateTaskbarDisplays();
     const std::wstring targetId = resolveEditingMonitorDeviceName(displays);
     const auto current = monitorSettingsForDevice(targetId);
-    const DockResourceOrder next = reorderedDockResourceOrder(
-        current.dockResourceOrder, metric, static_cast<DockResourceReorder>(operation));
+    const DockResourceOrder next =
+        movedDockResourceOrder(current.dockResourceOrder, metric, targetIndex);
     updateMonitorSettings(targetId,
                           [next](MonitorTaskbarSettings& profile) { profile.dockResourceOrder = next; });
     applyDockResourceVisibility();
-    logSettingInt(L"dock-resource-reorder", metric * 4 + operation);
+    logSettingInt(L"dock-resource-reorder", metric * static_cast<int>(kDockResourceMetricCount) +
+                                                targetIndex);
     saveSettings();
 }
 
@@ -1665,8 +1666,8 @@ SettingsActions App::buildSettingsActions() {
     act.onDockResourceSmallFont = [this](bool on) { applyDockResourceSmallFont(on); };
     act.onDockResourceHideLabels = [this](bool on) { applyDockResourceHideLabels(on); };
     act.onDockResourcePlacement = [this](int placement) { applyDockResourcePlacement(placement); };
-    act.onDockResourceReorder = [this](int metric, int operation) {
-        applyDockResourceReorder(metric, operation);
+    act.onDockResourceReorder = [this](int metric, int targetIndex) {
+        applyDockResourceReorder(metric, targetIndex);
     };
     act.onSpectrum = [this](bool on) { applySpectrumOn(on); };
     act.onSpectrumStyle = [this](int style) { applySpectrumStyle(style); };
