@@ -103,7 +103,6 @@ inline constexpr int kIdImmersiveBackgroundBlur = 471;
 inline constexpr int kIdDockBackgroundBlur = 474;
 inline constexpr int kIdEmbeddedResourceMonitor = 481;
 inline constexpr int kIdDockResourceMetrics = 531;
-inline constexpr int kIdDockResourceReorder = 533;
 inline constexpr int kDockResourceMetricCpu = 0;
 inline constexpr int kDockResourceMetricMemory = 1;
 inline constexpr int kDockResourceMetricUpload = 2;

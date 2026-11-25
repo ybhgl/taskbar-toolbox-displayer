@@ -21,6 +21,8 @@ public:
     void create();
     void update(const SettingsState& s);
     void onCommand(int id, int option = -1);
+    // 监控项顺序不挂在任何设置行上，用独立入口接收拖拽落位，避免被行查找拦截。
+    void reorderDockResourceMetric(int metric, int targetIndex);
     void updateFloatingCardRowsEnabled();
     void updateProgressBackgroundRowsEnabled();
     void updateBackgroundAdjustmentPresentation();

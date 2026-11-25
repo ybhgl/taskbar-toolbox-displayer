@@ -267,6 +267,16 @@ bool SettingsSections::onSongToastCommand(int id, Row* row) {
     return true;
 }
 
+void SettingsSections::reorderDockResourceMetric(int metric, int targetIndex) {
+    if (metric < 0 || metric >= kDockResourceMetricCount || targetIndex < 0 ||
+        targetIndex >= kDockResourceMetricCount)
+        return;
+    state.dockResourceOrder = movedDockResourceOrder(state.dockResourceOrder, metric, targetIndex);
+    updateImmersiveRowsEnabled();
+    if (actions.onDockResourceReorder)
+        actions.onDockResourceReorder(metric, targetIndex);
+}
+
 void SettingsSections::onCommand(int id, int option) {
     if (id >= kIdOpenDocs && id <= kIdOpenAbout) {
         const auto& action = id == kIdOpenDocs       ? actions.onOpenDocs
@@ -456,18 +466,6 @@ void SettingsSections::onCommand(int id, int option) {
                 actions.onDockResourceCpuFrequency(state.dockResourceCpuFrequency);
         }
         break;
-    case kIdDockResourceReorder: {
-        if (option < 0 || option >= kDockResourceMetricCount * kDockResourceMetricCount)
-            break;
-        const int metric = option / kDockResourceMetricCount;
-        const int targetIndex = option % kDockResourceMetricCount;
-        state.dockResourceOrder =
-            movedDockResourceOrder(state.dockResourceOrder, metric, targetIndex);
-        updateImmersiveRowsEnabled();
-        if (actions.onDockResourceReorder)
-            actions.onDockResourceReorder(metric, targetIndex);
-        break;
-    }
     case kIdDockResourcePlacement:
         state.dockResourcePlacement = std::clamp(row->selected, 0, 1);
         if (actions.onDockResourcePlacement)

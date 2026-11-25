@@ -216,8 +216,8 @@ struct SettingsDialog::Impl {
             [this](int id, int targetIndex) {
                 if (!hwnd || !IsWindow(hwnd))
                     return;
-                onCommand(kIdDockResourceReorder,
-                          id * settings_ui::kDockResourceMetricCount + targetIndex);
+                sections_.reorderDockResourceMetric(id, targetIndex);
+                surface.invalidate();
             });
     }
 
