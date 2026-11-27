@@ -169,6 +169,7 @@ void App::applyTaskbarViewModeForMonitor(const std::wstring& deviceName, int mod
         settings_.taskbarViewMode_ = static_cast<TaskbarViewMode>(mode);
     }
     if (taskbarHost || taskbarPendingDisplayRebuild_) {
+        cancelMissingMonitorCheck();
         publishTaskbarAppearance();
         syncTaskbarView(monitor.snapshot());
         if (taskbarHost) {
@@ -543,6 +544,7 @@ bool App::applyEffectiveRenderMode(int mode) {
     if (enteringStopped) {
         taskbarEnabledBeforeStopped_ = taskbarEnabledForUserAction();
         cancelTaskbarDisplayRebuildRetry();
+        cancelMissingMonitorCheck();
     }
 
     renderMode_ = nextMode;
@@ -728,6 +730,8 @@ void App::applyFloatingCardAutoTextContrast(bool on) {
 
 void App::applySongToastEnabled(bool on) {
     settings_.songToastEnabled_ = on;
+    if (!on)
+        cancelSongToastCoverWait();
     if (isMinimalRenderMode()) {
         cancelSongToastCoverWait();
         songToast_.reset();

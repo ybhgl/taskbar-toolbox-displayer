@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace system_monitor {
@@ -41,76 +42,6 @@ uint64_t monotonicMilliseconds() {
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch())
             .count());
-}
-
-bool readNetworkTotals(uint64_t& received, uint64_t& sent, uint64_t& interfaceIndex) {
-    // 默认路由指向的网卡才是当前实际出口。按 8.8.8.8 选路可让系统按路由度量
-    // 自动在以太网、WLAN、VPN 之间切换，避免把所有虚拟适配器的计数叠加。
-    sockaddr_in destination{};
-    destination.sin_family = AF_INET;
-    // 0x08080808 已是 8.8.8.8 的网络字节序，无需额外链接 ws2_32 的转换函数。
-    destination.sin_addr.s_addr = 0x08080808u;
-    DWORD bestIndex = 0;
-    const bool haveDefaultRoute =
-        GetBestInterfaceEx(reinterpret_cast<sockaddr*>(&destination), &bestIndex) == NO_ERROR &&
-        bestIndex != 0;
-
-    MIB_IF_TABLE2* table = nullptr;
-    if (GetIfTable2(&table) != NO_ERROR || !table)
-        return false;
-
-    // 代理/VPN 的 TUN 适配器（IF_TYPE_PROP_VIRTUAL，HardwareInterface=false）会把同一条
-    // 代理流量的收发都累加进自己的计数器，直接采样会让上行读数与下行几乎相同；NDIS 过滤
-    // 驱动的伪接口又与真实网卡计数完全重复。因此只认物理网卡，天然排除这两类。
-    const auto isPhysicalNic = [](const MIB_IF_ROW2& row) {
-        return row.OperStatus == IfOperStatusUp && row.Type != IF_TYPE_SOFTWARE_LOOPBACK &&
-               row.InterfaceAndOperStatusFlags.HardwareInterface;
-    };
-
-    const MIB_IF_ROW2* picked = nullptr;
-    if (haveDefaultRoute) {
-        for (ULONG i = 0; i < table->NumEntries; ++i) {
-            const MIB_IF_ROW2& row = table->Table[i];
-            if (row.InterfaceIndex == bestIndex && isPhysicalNic(row)) {
-                picked = &row;
-                break;
-            }
-        }
-    }
-    if (!picked) {
-        // 出口被 TUN 接管（例如系统代理全量走 TUN）时，改取累计流量最大的物理网卡：
-        // 多网卡场景下它才是真正承载业务的那块，且不会把过滤驱动的重复计数叠加进来。
-        uint64_t mostTraffic = 0;
-        for (ULONG i = 0; i < table->NumEntries; ++i) {
-            const MIB_IF_ROW2& row = table->Table[i];
-            if (!isPhysicalNic(row))
-                continue;
-            const uint64_t traffic = row.InOctets + row.OutOctets;
-            if (!picked || traffic > mostTraffic) {
-                picked = &row;
-                mostTraffic = traffic;
-            }
-        }
-    }
-    if (!picked && haveDefaultRoute) {
-        // 虚拟机等没有物理网卡的场景退回默认出口本身，仍排除回环。
-        for (ULONG i = 0; i < table->NumEntries; ++i) {
-            const MIB_IF_ROW2& row = table->Table[i];
-            if (row.InterfaceIndex != bestIndex || row.OperStatus != IfOperStatusUp ||
-                row.Type == IF_TYPE_SOFTWARE_LOOPBACK)
-                continue;
-            picked = &row;
-            break;
-        }
-    }
-
-    if (picked) {
-        received = picked->InOctets;
-        sent = picked->OutOctets;
-        interfaceIndex = picked->InterfaceIndex;
-    }
-    FreeMibTable(table);
-    return picked != nullptr;
 }
 
 } // namespace
@@ -237,8 +168,8 @@ void ResourceMonitor::start() {
         return;
 
     haveCpuBaseline_ = false;
-    haveNetworkBaseline_ = false;
-    previousNetworkInterfaceIndex_ = 0;
+    previousNetworkCounters_.clear();
+    previousNetworkTickMs_.reset();
     stopRequested_ = false;
     ResourceSnapshot empty;
     empty.revision = snapshot_.revision + 1;
@@ -285,6 +216,64 @@ void ResourceMonitor::run() {
     performanceCounters_.reset();
 }
 
+void ResourceMonitor::sampleNetwork(ResourceSnapshot& result) {
+    const uint64_t nowMs = monotonicMilliseconds();
+    MIB_IF_TABLE2* rawTable = nullptr;
+    if (GetIfTable2(&rawTable) != NO_ERROR || !rawTable)
+        return;
+    const std::unique_ptr<MIB_IF_TABLE2, decltype(&FreeMibTable)> table(rawTable, FreeMibTable);
+
+    // 基础过滤：已连接、非回环、非隧道，以及会重复上报所属网卡计数的 NDIS 过滤驱动伪接口。
+    const auto isUsable = [](const MIB_IF_ROW2& row) {
+        return row.OperStatus == IfOperStatusUp && row.Type != IF_TYPE_SOFTWARE_LOOPBACK &&
+               row.Type != IF_TYPE_TUNNEL && !row.InterfaceAndOperStatusFlags.FilterInterface;
+    };
+    // 代理/VPN 的虚拟适配器（IF_TYPE_PROP_VIRTUAL，HardwareInterface=false）会把同一条代理
+    // 流量的收发都累加进自己的计数器，与物理网卡叠加后上下行读数几乎相同。因此优先只统计
+    // 物理网卡；虚拟机等没有物理网卡的场景退回全部可用接口，避免完全没有读数。
+    bool havePhysical = false;
+    for (ULONG i = 0; i < table->NumEntries; ++i) {
+        const MIB_IF_ROW2& row = table->Table[i];
+        if (isUsable(row) && row.InterfaceAndOperStatusFlags.HardwareInterface) {
+            havePhysical = true;
+            break;
+        }
+    }
+
+    std::unordered_map<uint64_t, NetworkCounters> currentCounters;
+    uint64_t receivedDelta = 0;
+    uint64_t sentDelta = 0;
+    for (ULONG i = 0; i < table->NumEntries; ++i) {
+        const MIB_IF_ROW2& row = table->Table[i];
+        if (!isUsable(row))
+            continue;
+        if (havePhysical && !row.InterfaceAndOperStatusFlags.HardwareInterface)
+            continue;
+
+        const uint64_t luid = row.InterfaceLuid.Value;
+        const NetworkCounters counters{row.InOctets, row.OutOctets};
+        currentCounters.emplace(luid, counters);
+        const auto previous = previousNetworkCounters_.find(luid);
+        if (previous == previousNetworkCounters_.end())
+            continue;
+        if (counters.received >= previous->second.received)
+            receivedDelta += counters.received - previous->second.received;
+        if (counters.sent >= previous->second.sent)
+            sentDelta += counters.sent - previous->second.sent;
+    }
+
+    if (previousNetworkTickMs_ && nowMs > *previousNetworkTickMs_) {
+        const auto elapsedMs = static_cast<long double>(nowMs - *previousNetworkTickMs_);
+        result.downloadBytesPerSecond = static_cast<uint64_t>(
+            std::llround(static_cast<long double>(receivedDelta) * 1000.0L / elapsedMs));
+        result.uploadBytesPerSecond = static_cast<uint64_t>(
+            std::llround(static_cast<long double>(sentDelta) * 1000.0L / elapsedMs));
+        result.networkAvailable = true;
+    }
+    previousNetworkCounters_.swap(currentCounters);
+    previousNetworkTickMs_ = nowMs;
+}
+
 ResourceSnapshot ResourceMonitor::sample() {
     ResourceSnapshot result;
 
@@ -325,33 +314,7 @@ ResourceSnapshot ResourceMonitor::sample() {
         result.memoryAvailable = true;
     }
 
-    uint64_t received = 0;
-    uint64_t sent = 0;
-    uint64_t interfaceIndex = 0;
-    const uint64_t nowMs = monotonicMilliseconds();
-    if (readNetworkTotals(received, sent, interfaceIndex)) {
-        const bool sameInterface =
-            haveNetworkBaseline_ && interfaceIndex == previousNetworkInterfaceIndex_;
-        if (sameInterface && nowMs > previousNetworkTickMs_ && received >= previousNetworkIn_ &&
-            sent >= previousNetworkOut_) {
-            const uint64_t elapsedMs = nowMs - previousNetworkTickMs_;
-            result.downloadBytesPerSecond = static_cast<uint64_t>(std::llround(
-                static_cast<long double>(received - previousNetworkIn_) * 1000.0L /
-                static_cast<long double>(elapsedMs)));
-            result.uploadBytesPerSecond = static_cast<uint64_t>(std::llround(
-                static_cast<long double>(sent - previousNetworkOut_) * 1000.0L /
-                static_cast<long double>(elapsedMs)));
-            result.networkAvailable = true;
-        }
-        previousNetworkIn_ = received;
-        previousNetworkOut_ = sent;
-        previousNetworkTickMs_ = nowMs;
-        previousNetworkInterfaceIndex_ = interfaceIndex;
-        haveNetworkBaseline_ = true;
-    } else {
-        haveNetworkBaseline_ = false;
-        previousNetworkInterfaceIndex_ = 0;
-    }
+    sampleNetwork(result);
 
     SYSTEM_POWER_STATUS powerStatus{};
     if (GetSystemPowerStatus(&powerStatus) && powerStatus.BatteryFlag != 128 &&

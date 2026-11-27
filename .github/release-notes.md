@@ -8,9 +8,16 @@
 
 ### 功能优化与修复
 
-- 修复网速监控把多块网卡流量累加，导致显示速度数倍高于实际速度的问题；现在只统计当前默认出口网卡。
+- 修复网速监控把多块网卡流量累加，导致显示速度数倍高于实际速度的问题；现在按物理网卡分别统计，并排除虚拟网卡、TUN 适配器与过滤驱动接口。
 - 网络出口切换时重置采样基线，避免切换瞬间出现异常的网速峰值。
+- 修复资源监视中网络统计重复叠加问题 @sugaredw
 - 更新检查固定使用 GitHub 渠道，移除 Gitee 更新源入口。
+- 修复多显示器部分情况下部分任务栏没有显示歌词软件入口的问题
+- 优化多显示器下右键菜单展示模式的文案
+- 修复悬浮卡片单独开启快捷启动或者今日任务时内容与返回媒体卡片按钮重叠的问题
+- 修复内嵌、沉浸和 Dock 模式频谱左右侧遮挡问题
+- 优化切歌弹窗的封面等待逻辑和主题刷新的处理 @hyrinx
+- 优化部分彩蛋显示效果
 
 ### 下载与使用
 
@@ -20,9 +27,9 @@
 
 首次使用滴答清单今日任务时，在软件设置中的「滴答清单」项填写 [滴答清单网页版](https://dida365.com/webapp/)「设置 → 账号与安全 → API 口令」中创建的普通用户 API 口令，然后开启自动同步。任务详情通过网页打开，任务完成操作可直接在任务卡片中进行。
 
-也可以在软件的「关于」窗口中选择 GitHub 更新源，检查并安装新版本。
+也可以在软件的「关于」窗口中检查并安装新版本。
 
-> 网易云音乐需要额外下载 BetterNCM 和 InfLink-rs 插件，具体下载方式可以参考 [README](https://github.com/ybhgl/taskbar-toolbox-displayer?tab=readme-ov-file)。
+> 网易云音乐需要额外下载 BetterNCM 和 InfLink-rs 插件，具体下载方式可以参考 [README](https://github.com/ybhgl/taskbar-lyrics-displayer?tab=readme-ov-file)。
 
 ### 注意事项
 
@@ -30,4 +37,4 @@
 
 ### 自行构建
 
-Visual Studio 2022 + vcpkg + CMake + Ninja，详见 [README](https://github.com/ybhgl/taskbar-toolbox-displayer?tab=readme-ov-file)。
+Visual Studio 2022 + vcpkg + CMake + Ninja，详见 [README](https://github.com/ybhgl/taskbar-lyrics-displayer?tab=readme-ov-file)。
