@@ -121,6 +121,12 @@ struct SettingsState {
     int genericSmtcFilterMode = 0; // 0 全部应用 1 仅白名单 2 排除黑名单
     std::vector<GenericSmtcAppRule> genericSmtcRules;
     std::wstring fontDesc;         // 字体设置提示文字（如 "Microsoft YaHei UI, 16px, 常规"）
+    bool dockPetVisible = false;   // 是否显示桌宠（Dock/沉浸任务栏与媒体卡片）
+    bool resourceDoubleClickLaunch = false; // 双击资源监视区域启动指定应用
+    std::wstring resourceLaunchAppName;     // 已选启动应用的文件名，空表示未选
+    bool resourceMonitorActive = false;     // 任一显示器启用资源监视，用于开关联动
+    bool embeddedAutoWidth = true; // 内嵌内容长度自动跟随最大可用空白区
+    int embeddedMaxWidth = kEmbeddedMaxWidthDefault; // 关闭自动后的最大长度（DIP）
     UiFontSource uiFontSource = UiFontSource::Independent;
     std::wstring uiFontDesc;
 };

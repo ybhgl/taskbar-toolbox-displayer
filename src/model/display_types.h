@@ -17,6 +17,42 @@ enum class LyricFontStyle {
     Italic,
     BoldItalic,
 };
+
+// 用户可调字重（100-900）。加粗不再作为独立样式位，而是字重的 700 档；
+// 旧配置的 Bold/BoldItalic 由 legacyFontStyleWeight 迁移。
+inline constexpr int kDefaultFontWeight = 400;
+inline constexpr int kMinimumFontWeight = 100;
+inline constexpr int kMaximumFontWeight = 900;
+
+inline constexpr int clampFontWeight(int weight) noexcept {
+    return weight < kMinimumFontWeight ? kMinimumFontWeight
+         : weight > kMaximumFontWeight ? kMaximumFontWeight
+                                       : weight;
+}
+
+// 旧配置只有粗体二值，读入时换算成等效字重。
+inline constexpr int legacyFontStyleWeight(LyricFontStyle style) noexcept {
+    return style == LyricFontStyle::Bold || style == LyricFontStyle::BoldItalic ? 700
+                                                                              : kDefaultFontWeight;
+}
+
+// 以常规字重为基准整体平移：正文 400 落到用户值，标题等 600 档保持同等相对强调。
+inline constexpr int shiftFontWeight(int baseWeight, int configuredWeight) noexcept {
+    return clampFontWeight(baseWeight + configuredWeight - kDefaultFontWeight);
+}
+
+// 内嵌模式的用户最大内容长度（DIP）。自动模式取任务栏最大空白区，手动模式取该值；
+// 两者都会被实际空白区裁切，保证内容不覆盖任务栏图标。
+inline constexpr int kEmbeddedMaxWidthDefault = 280;
+inline constexpr int kEmbeddedMaxWidthMinimum = 160;
+inline constexpr int kEmbeddedMaxWidthMaximum = 1200;
+
+inline constexpr int clampEmbeddedMaxWidth(int width) noexcept {
+    return width < kEmbeddedMaxWidthMinimum ? kEmbeddedMaxWidthMinimum
+         : width > kEmbeddedMaxWidthMaximum ? kEmbeddedMaxWidthMaximum
+                                            : width;
+}
+
 namespace fluent {
 enum class ThemeMode {
     FollowSystem,

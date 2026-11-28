@@ -85,7 +85,11 @@ public:
     std::wstring statusText() const override;
 
     void changeFont(float delta) override;
-    void setFont(const std::wstring& family, float size, LyricFontStyle style) override;
+    void setFont(const std::wstring& family, float size, LyricFontStyle style, int weight) override;
+    // 内嵌模式内容长度策略：自动跟随任务栏最大空白区，或使用用户设定的最大长度（DIP）。
+    void setEmbeddedWidthPolicy(bool autoWidth, int maxWidthDip);
+    // 双击资源监视区域启动的应用；enabled 为 false 或路径为空时不响应。
+    void setResourceLaunchTarget(bool enabled, const std::wstring& appPath);
     LyricFontSizeContext fontSizeContext() const;
 
     // 歌词外观：光晕 / 描边（任务栏独有，桌面歌词有自己的配色），开关和颜色分别独立

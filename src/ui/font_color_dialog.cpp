@@ -400,7 +400,7 @@ struct FontColorDialog::Impl {
             state.fontFamily.empty() ? kDefaultUiFontFamily : state.fontFamily.c_str();
         IDWriteTextFormat* format = nullptr;
         if (FAILED(
-                dwrite->CreateTextFormat(family, nullptr, dwriteWeightOf(state.fontStyle),
+                dwrite->CreateTextFormat(family, nullptr, dwriteWeightOf(state.fontWeight),
                                          dwriteStyleOf(state.fontStyle), DWRITE_FONT_STRETCH_NORMAL,
                                          std::max(1.0f, state.lyricFontSize), L"zh-cn", &format)) ||
             !format) {

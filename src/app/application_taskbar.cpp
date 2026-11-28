@@ -903,9 +903,14 @@ TaskbarCreateResult App::createTaskbar(HINSTANCE inst, bool allowOverlap) {
     forEachHost([&](TaskbarHost* host) {
         const auto profile = monitorSettingsForHost(host);
         host->setAppBarEdge(profile.appBarEdge);
+        host->setEmbeddedWidthPolicy(settings_.embeddedAutoWidth_, settings_.embeddedMaxWidth_);
+        host->setResourceLaunchTarget(
+            settings_.resourceDoubleClickLaunch_ && !settings_.resourceLaunchApp_.empty(),
+            settings_.resourceLaunchApp_);
         syncHost(host);
         if (settings_.hasUserFont_)
-            host->setFont(settings_.fontFamily_, settings_.fontSize_, settings_.fontStyle_);
+            host->setFont(settings_.fontFamily_, settings_.fontSize_, settings_.fontStyle_,
+                          settings_.fontWeight_);
         host->applyAppearance(appearanceForHost(host));
 
         host->setAnchor(profile.anchor());

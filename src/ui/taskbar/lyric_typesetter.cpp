@@ -502,15 +502,17 @@ LyricTextMetrics LyricTypesetter::buildContent(const LyricTextInput& input) {
 }
 
 void LyricTypesetter::createFormat(Microsoft::WRL::ComPtr<IDWriteTextFormat>& format,
-                                   const std::wstring& family, LyricFontStyle style, float size,
-                                   DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT alignment,
-                                   const wchar_t* locale) {
+                                   const std::wstring& family, LyricFontStyle style,
+                                   int configuredWeight, float size, DWRITE_FONT_WEIGHT weight,
+                                   DWRITE_TEXT_ALIGNMENT alignment, const wchar_t* locale) {
     if (!factory_)
         return;
     format.Reset();
-    const auto effectiveWeight = isBoldFontStyle(style) ? DWRITE_FONT_WEIGHT_BOLD : weight;
-    factory_->CreateTextFormat(family.c_str(), nullptr, effectiveWeight, dwriteStyleOf(style),
-                               DWRITE_FONT_STRETCH_NORMAL, size, locale,
+    // 用户字重以常规为基准整体平移，标题等 BaseWeight 600 的格式仍保持相对强调。
+    factory_->CreateTextFormat(family.c_str(), nullptr,
+                               dwriteWeightOf(shiftFontWeight(static_cast<int>(weight),
+                                                              configuredWeight)),
+                               dwriteStyleOf(style), DWRITE_FONT_STRETCH_NORMAL, size, locale,
                                format.ReleaseAndGetAddressOf());
     if (format) {
         format->SetTextAlignment(alignment);
@@ -521,29 +523,29 @@ void LyricTypesetter::createFormat(Microsoft::WRL::ComPtr<IDWriteTextFormat>& fo
 }
 
 void LyricTypesetter::recreateLyricFormats(const std::wstring& family, LyricFontStyle style,
-                                           const LyricFontSizes& sizes) {
-    createFormat(resources_.fmtTitle_, family, style, sizes.title, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                 DWRITE_TEXT_ALIGNMENT_LEADING);
-    createFormat(resources_.fmtArtist_, family, style, sizes.artist, DWRITE_FONT_WEIGHT_NORMAL,
-                 DWRITE_TEXT_ALIGNMENT_LEADING);
-    createFormat(resources_.fmtRepeatHint_, family, style, sizes.artist,
+                                           int configuredWeight, const LyricFontSizes& sizes) {
+    createFormat(resources_.fmtTitle_, family, style, configuredWeight, sizes.title,
+                 DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING);
+    createFormat(resources_.fmtArtist_, family, style, configuredWeight, sizes.artist,
+                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING);
+    createFormat(resources_.fmtRepeatHint_, family, style, configuredWeight, sizes.artist,
                  DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     if (resources_.fmtRepeatHint_)
         resources_.fmtRepeatHint_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-    createFormat(resources_.fmtLyric_, family, style, sizes.lyric, DWRITE_FONT_WEIGHT_NORMAL,
-                 DWRITE_TEXT_ALIGNMENT_LEADING);
-    createFormat(resources_.fmtNextLyric_, family, style, sizes.next, DWRITE_FONT_WEIGHT_NORMAL,
-                 DWRITE_TEXT_ALIGNMENT_LEADING);
-    createFormat(resources_.fmtSecondary_, family, style, sizes.secondary,
+    createFormat(resources_.fmtLyric_, family, style, configuredWeight, sizes.lyric,
+                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING);
+    createFormat(resources_.fmtNextLyric_, family, style, configuredWeight, sizes.next,
+                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING);
+    createFormat(resources_.fmtSecondary_, family, style, configuredWeight, sizes.secondary,
                  DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING);
 }
 
 void LyricTypesetter::recreateClockFormats(const std::wstring& family, LyricFontStyle style,
-                                           float timeSize, float dateSize) {
-    createFormat(resources_.fmtClockTime_, family, style, timeSize, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                 DWRITE_TEXT_ALIGNMENT_CENTER, L"");
-    createFormat(resources_.fmtClockDate_, family, style, dateSize, DWRITE_FONT_WEIGHT_NORMAL,
-                 DWRITE_TEXT_ALIGNMENT_CENTER, L"");
+                                           int configuredWeight, float timeSize, float dateSize) {
+    createFormat(resources_.fmtClockTime_, family, style, configuredWeight, timeSize,
+                 DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, L"");
+    createFormat(resources_.fmtClockDate_, family, style, configuredWeight, dateSize,
+                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, L"");
     if (resources_.fmtClockTime_)
         resources_.fmtClockTime_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     if (resources_.fmtClockDate_)
@@ -552,17 +554,17 @@ void LyricTypesetter::recreateClockFormats(const std::wstring& family, LyricFont
 
 void LyricTypesetter::createDragPreviewFormat() {
     createFormat(resources_.fmtDragPreview_, fluent::uiFontFamily(), LyricFontStyle::Normal,
-                 fluent::font_sizes::taskbar::dragPreview,
+                 kDefaultFontWeight, fluent::font_sizes::taskbar::dragPreview,
                  DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
     if (resources_.fmtDragPreview_)
         resources_.fmtDragPreview_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 }
 
 bool LyricTypesetter::ensureResourceFormat(const std::wstring& family, LyricFontStyle style,
-                                           float size) {
+                                           int configuredWeight, float size) {
     if (!resources_.fmtResource_) {
-        createFormat(resources_.fmtResource_, family, style, size, dwriteWeightOf(style),
-                     DWRITE_TEXT_ALIGNMENT_LEADING);
+        createFormat(resources_.fmtResource_, family, style, configuredWeight, size,
+                     DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING);
         if (resources_.fmtResource_)
             resources_.fmtResource_->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     }

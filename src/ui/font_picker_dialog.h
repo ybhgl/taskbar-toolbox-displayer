@@ -10,11 +10,11 @@
 #include <vector>
 
 // Win11 风格字体选择对话框（替代系统 ChooseFont）：
-// 字体族筛选/列表（各行以该字体渲染预览）、字号、样式、示例预览。
+// 字体族筛选/列表（各行以该字体渲染预览）、字号、字重滑杆、斜体与示例预览。
 class FontPickerDialog {
 public:
-    using ApplyCallback =
-        std::function<void(const std::wstring& family, float sizePt, LyricFontStyle style)>;
+    using ApplyCallback = std::function<void(const std::wstring& family, float sizePt,
+                                             LyricFontStyle style, int weight)>;
 
     FontPickerDialog();
     ~FontPickerDialog();
@@ -23,7 +23,7 @@ public:
     FontPickerDialog& operator=(const FontPickerDialog&) = delete;
 
     bool create(HINSTANCE inst, HWND parent, const std::wstring& family, float sizePt,
-                LyricFontStyle style, bool interfaceFont = false);
+                LyricFontStyle style, int weight, bool interfaceFont = false);
     void show();
     void destroy();
     bool isOpen() const;

@@ -26,7 +26,9 @@ constexpr int kIdSizeEdit = 203;
 constexpr int kIdSizeList = 204;
 constexpr int kIdOk = 206;
 constexpr int kIdCancel = 207;
-constexpr int kIdStyleGroup = 211;
+constexpr int kIdWeightSlider = 211;
+constexpr int kIdItalicToggle = 212;
+constexpr int kIdStyleGroup = 213; // 仅界面字体模式
 
 constexpr DWORD kDialogStyle = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME;
 constexpr DWORD kDialogExStyle = WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE;
@@ -39,6 +41,19 @@ constexpr float kListRowHeight = 32.0f;
 constexpr float kScrollBarWidth = 3.0f;
 constexpr float kScrollBarHitWidth = 12.0f;
 constexpr float kScrollBarInset = 8.0f;
+
+// 字重滑杆：配置值 100-900，拖动步进 10；方向键半档，Shift 微调一档。
+constexpr int kWeightStep = 10;
+constexpr int kWeightKeyStep = 50;
+constexpr int kWeightFineKeyStep = 10;
+constexpr float kWeightTrackHeight = 4.0f;
+constexpr float kWeightThumbRadius = 7.0f;
+constexpr float kWeightThumbRadiusActive = 8.0f;
+constexpr float kWeightLabelWidth = 48.0f;
+constexpr float kWeightValueWidth = 64.0f;
+constexpr float kItalicToggleWidth = 56.0f;
+constexpr float kItalicCircleSize = 16.0f;
+constexpr float kItalicTextGap = 8.0f;
 
 constexpr int kSizePresets[] = {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20,
                                 22, 24, 26, 28, 32, 36, 40, 48};
@@ -59,6 +74,7 @@ constexpr fluent::TextEditOptions kSizeEditOptions{
     .allowUndo = false,
 };
 
+// 界面字体仍沿用四选一样式；歌词字体的加粗已由字重滑杆表达。
 const std::array<const wchar_t*, 4>& styleNames() {
     static const std::array<const wchar_t*, 4> names = {L"常规", L"加粗", L"斜体", L"粗斜体"};
     return names;
@@ -69,6 +85,19 @@ std::wstring lowerOf(const std::wstring& s) {
     for (auto& c : r)
         c = static_cast<wchar_t>(std::towlower(c));
     return r;
+}
+
+// 字体名比对用的归一化：忽略大小写与空格/连字符/下划线/点，
+// 旧配置里的本地化名或全名常和 GetFamilyNames 取到的主名有这些差异。
+std::wstring normalizedFamilyName(const std::wstring& name) {
+    std::wstring out;
+    out.reserve(name.size());
+    for (wchar_t ch : name) {
+        if (std::iswspace(ch) || ch == L'-' || ch == L'_' || ch == L'.')
+            continue;
+        out.push_back(static_cast<wchar_t>(std::towlower(ch)));
+    }
+    return out;
 }
 
 struct ScrollBarGeometry {
@@ -110,6 +139,7 @@ struct FontPickerDialog::Impl {
     std::wstring initFamily;
     float initSize = fluent::font_sizes::taskbar::pickerInitial;
     LyricFontStyle initStyle = LyricFontStyle::Normal;
+    int initWeight = kDefaultFontWeight;
     bool interfaceFont = false;
 
     TextField filterEdit;
@@ -119,11 +149,18 @@ struct FontPickerDialog::Impl {
     std::map<int, IDWriteTextFormat*> familyFormats;
     int familySelected = -1;
     int sizeSelected = -1;
-    int styleSelected = 0;
+    int weightValue = kDefaultFontWeight;
+    bool italic = false;
+    int styleSelected = 0; // 仅界面字体模式使用
+    bool initialRevealPending = false; // 首帧布局完成后需要把当前字体/字号滚动到中部
 
     D2D1_RECT_F titleRect{};
     D2D1_RECT_F subtitleRect{};
     D2D1_RECT_F filterRect{};
+    D2D1_RECT_F weightLabelRect{};
+    D2D1_RECT_F weightSliderRect{};
+    D2D1_RECT_F weightValueRect{};
+    D2D1_RECT_F italicRect{};
     D2D1_RECT_F styleLabelRect{};
     D2D1_RECT_F styleRect{};
     D2D1_RECT_F familyListRect{};
@@ -137,7 +174,7 @@ struct FontPickerDialog::Impl {
     D2D1_RECT_F previewRect{};
     D2D1_RECT_F okRect{};
     D2D1_RECT_F cancelRect{};
-    std::vector<D2D1_RECT_F> styleOptionRects;
+    std::vector<D2D1_RECT_F> styleOptionRects; // 仅界面字体模式使用
 
     float familyScroll = 0.0f;
     float sizeScroll = 0.0f;
@@ -299,6 +336,8 @@ struct FontPickerDialog::Impl {
         familySelected = -1;
         sizeSelected = -1;
         styleSelected = static_cast<int>(initStyle);
+        weightValue = clampFontWeight(initWeight);
+        italic = isItalicFontStyle(initStyle);
         focusedId = kIdFilterEdit;
         focusVisible = false;
         familyScroll = 0.0f;
@@ -322,18 +361,36 @@ struct FontPickerDialog::Impl {
         }
 
         familySelected = -1;
-        const std::wstring loweredPrevious = lowerOf(previous);
-        for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
-            if (lowerOf(families[filtered[i]]) == loweredPrevious) {
-                familySelected = i;
-                break;
+        const std::wstring wanted = normalizedFamilyName(previous);
+        if (!wanted.empty()) {
+            for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
+                if (normalizedFamilyName(families[filtered[i]]) == wanted) {
+                    familySelected = i;
+                    break;
+                }
+            }
+            // 归一化后仍对不上时，先找前缀一致、再找包含关系，最后才退回第一行。
+            for (int pass = 0; pass < 2 && familySelected < 0; ++pass) {
+                for (int i = 0; i < static_cast<int>(filtered.size()); ++i) {
+                    const std::wstring candidate = normalizedFamilyName(families[filtered[i]]);
+                    const bool hit = pass == 0 ? candidate.starts_with(wanted)
+                                               : candidate.find(wanted) != std::wstring::npos;
+                    if (hit) {
+                        familySelected = i;
+                        break;
+                    }
+                }
             }
         }
         if (familySelected < 0 && !filtered.empty())
             familySelected = 0;
         familyScroll = 0.0f;
         familyScrollView.setOffset(0.0f);
-        ensureVisible(true, familySelected);
+        // 布局尚未完成时先记下来，等 layout() 拿到真实高度再定位，避免按空矩形计算滚动量。
+        if (listsLaidOut())
+            centerRow(true, familySelected);
+        else
+            initialRevealPending = true;
     }
 
     std::wstring currentFamily() const {
@@ -354,9 +411,50 @@ struct FontPickerDialog::Impl {
     }
 
     LyricFontStyle currentStyle() const {
+        // 歌词字体只有斜体一个样式位（加粗已由字重表达）；界面字体仍取四选一结果。
+        if (!interfaceFont)
+            return italic ? LyricFontStyle::Italic : LyricFontStyle::Normal;
         if (styleSelected < 0 || styleSelected >= static_cast<int>(styleNames().size()))
             return initStyle;
         return static_cast<LyricFontStyle>(styleSelected);
+    }
+
+    std::wstring weightText() const {
+        return std::to_wstring(weightValue) + L" " + fontWeightName(weightValue);
+    }
+
+    // 预览取主歌词的基准字重（400 平移后即用户值）；界面字体仍按样式换算。
+    int currentWeight() const {
+        return interfaceFont ? legacyFontStyleWeight(currentStyle()) : weightValue;
+    }
+
+    float weightTrackLeft() const { return weightSliderRect.left + kWeightThumbRadiusActive; }
+
+    float weightTrackRight() const { return weightSliderRect.right - kWeightThumbRadiusActive; }
+
+    // 点击/拖动位置换算为步进 10 的字重，保证滑杆不会落在无意义的奇数上。
+    int weightAtX(float x) const {
+        const float left = weightTrackLeft();
+        const float right = weightTrackRight();
+        if (right <= left)
+            return weightValue;
+        const float t = std::clamp((x - left) / (right - left), 0.0f, 1.0f);
+        const int steps = static_cast<int>(std::lround(
+            t * (kMaximumFontWeight - kMinimumFontWeight) / kWeightStep));
+        return clampFontWeight(kMinimumFontWeight + steps * kWeightStep);
+    }
+
+    void setWeight(int weight) {
+        weight = clampFontWeight(weight);
+        if (weight == weightValue)
+            return;
+        weightValue = weight;
+        surface.invalidate();
+    }
+
+    void toggleItalic() {
+        italic = !italic;
+        surface.invalidate();
     }
 
     void syncSizeListSelection() {
@@ -410,6 +508,24 @@ struct FontPickerDialog::Impl {
             scroll = top;
         else if (bottom > scroll + viewHeight)
             scroll = bottom - viewHeight;
+        clampScroll(family);
+    }
+
+    bool listsLaidOut() const {
+        return familyListRect.bottom > familyListRect.top &&
+               familyListRect.right > familyListRect.left;
+    }
+
+    // 打开窗口时把当前字体/字号放到列表中部，比贴边更接近“定位到当前位置”。
+    void centerRow(bool family, int row) {
+        if (row < 0)
+            return;
+        const auto& rect = listRect(family);
+        const float viewHeight = rect.bottom - rect.top;
+        if (viewHeight <= 0.0f)
+            return;
+        float& scroll = listScroll(family);
+        scroll = row * kListRowHeight - (viewHeight - kListRowHeight) * 0.5f;
         clampScroll(family);
     }
 
@@ -577,6 +693,79 @@ struct FontPickerDialog::Impl {
                 p.accent,
                 D2D1::RectF(rect.left + 1.5f, rect.top + 1.5f, rect.right - 1.5f,
                             rect.bottom - 1.5f),
+                1.5f, std::max(1.0f, fluent::metrics::controlRadius - 1.0f));
+        }
+    }
+
+    void drawWeightRow(fluent::FluentDialogSurface::Painter& painter) {
+        const auto& p = fluent::palette();
+        auto* format = painter.textFormat(fluent::font_sizes::label, 400, false, true);
+        if (!format)
+            return;
+
+        painter.drawText(L"字重", format, weightLabelRect, p.textSecondary);
+
+        const float cy = (weightSliderRect.top + weightSliderRect.bottom) * 0.5f;
+        const float left = weightTrackLeft();
+        const float right = weightTrackRight();
+        const float fraction = (weightValue - kMinimumFontWeight) /
+                               static_cast<float>(kMaximumFontWeight - kMinimumFontWeight);
+        const float thumbX = left + std::max(0.0f, right - left) * fraction;
+        const float trackTop = cy - kWeightTrackHeight * 0.5f;
+        const float trackBottom = cy + kWeightTrackHeight * 0.5f;
+
+        painter.fillRoundRect(p.controlStroke,
+                              D2D1::RectF(left, trackTop, right, trackBottom),
+                              kWeightTrackHeight * 0.5f);
+        if (thumbX > left)
+            painter.fillRoundRect(p.accent,
+                                  D2D1::RectF(left, trackTop, thumbX, trackBottom),
+                                  kWeightTrackHeight * 0.5f);
+
+        const bool active = draggingWeight || hoverId == kIdWeightSlider;
+        const float radius = active ? kWeightThumbRadiusActive : kWeightThumbRadius;
+        painter.target()->FillEllipse(D2D1::Ellipse(D2D1::Point2F(thumbX, cy), radius, radius),
+                                      painter.brush(draggingWeight ? p.accentPressed
+                                                   : active          ? p.accentHover
+                                                                     : p.accent));
+
+        painter.drawText(weightText(), format, weightValueRect, p.text);
+
+        // 斜体与字重共用一行，选中态沿用原样式组的实心圆。
+        const float textLeft = italicRect.left + kItalicCircleSize + kItalicTextGap;
+        const float textWidth = painter.measureTextWidth(L"斜体", format);
+        const D2D1_ELLIPSE circle{D2D1::Point2F(italicRect.left + kItalicCircleSize * 0.5f, cy),
+                                  kItalicCircleSize * 0.5f, kItalicCircleSize * 0.5f};
+        const bool italicHover = hoverId == kIdItalicToggle;
+        const bool italicPressed = pressedId == kIdItalicToggle;
+        if (italic) {
+            painter.target()->FillEllipse(
+                circle,
+                painter.brush(italicHover || italicPressed ? p.accentHover : p.accent));
+            painter.target()->FillEllipse(D2D1::Ellipse(circle.point, 4.0f, 4.0f),
+                                          painter.brush(p.textOnAccent));
+        } else {
+            if (italicHover)
+                painter.target()->FillEllipse(circle, painter.brush(p.listHover));
+            painter.target()->DrawEllipse(circle, painter.brush(p.textSecondary),
+                                          italicPressed ? 1.5f : 1.0f);
+        }
+        painter.drawText(L"斜体", format,
+                         D2D1::RectF(textLeft, italicRect.top, textLeft + textWidth + 1.0f,
+                                     italicRect.bottom),
+                         p.text);
+
+        if (focusVisible && focusedId == kIdWeightSlider) {
+            painter.strokeRoundRect(
+                p.accent,
+                D2D1::RectF(weightSliderRect.left, weightSliderRect.top + 4.0f,
+                            weightSliderRect.right, weightSliderRect.bottom - 4.0f),
+                1.5f, fluent::metrics::controlRadius);
+        } else if (focusVisible && focusedId == kIdItalicToggle) {
+            painter.strokeRoundRect(
+                p.accent,
+                D2D1::RectF(italicRect.left + 1.5f, italicRect.top + 1.5f, italicRect.right - 1.5f,
+                            italicRect.bottom - 1.5f),
                 1.5f, std::max(1.0f, fluent::metrics::controlRadius - 1.0f));
         }
     }
@@ -759,7 +948,7 @@ struct FontPickerDialog::Impl {
 
         IDWriteTextFormat* format = nullptr;
         if (SUCCEEDED(painter.dwrite()->CreateTextFormat(
-                family.c_str(), nullptr, dwriteWeightOf(currentStyle()), dwriteStyleOf(currentStyle()),
+                family.c_str(), nullptr, dwriteWeightOf(currentWeight()), dwriteStyleOf(currentStyle()),
                 DWRITE_FONT_STRETCH_NORMAL, currentSize(), L"zh-cn", &format)) &&
             format) {
             fluent::applyUiFontFallback(format);
@@ -801,16 +990,28 @@ struct FontPickerDialog::Impl {
     }
 
     void paint(fluent::FluentDialogSurface::Painter& painter, float, float) {
+        // 首次定位必须放在 WM_SIZE 之后：WM_SIZE 会用滚动视图的 offset 回写滚动值，
+        // 而视图在首次绘制前尚未布局，offset 仍是 0，提前居中会被它冲掉。
+        if (initialRevealPending && listsLaidOut()) {
+            initialRevealPending = false;
+            centerRow(true, familySelected);
+            centerRow(false, sizeSelected);
+        }
         const auto& p = fluent::palette();
         painter.drawText(interfaceFont ? L"界面字体" : L"选择字体",
                          painter.textFormat(fluent::font_sizes::title, 600), titleRect, p.text);
         painter.drawText(interfaceFont ? L"选择字体、粗细和斜体并实时预览"
-                                      : L"搜索字体、字号和样式并实时预览", painter.textFormat(fluent::font_sizes::label, 400),
+                                      : L"搜索字体、字号与字重并实时预览", painter.textFormat(fluent::font_sizes::label, 400),
                          subtitleRect, p.textSecondary);
         drawTextField(painter, filterRect, filterEdit, kIdFilterEdit);
-        painter.drawText(L"样式", painter.textFormat(fluent::font_sizes::label, 400, false, true), styleLabelRect,
-                         p.textSecondary);
-        drawStyleGroup(painter);
+        if (interfaceFont) {
+            painter.drawText(L"样式",
+                             painter.textFormat(fluent::font_sizes::label, 400, false, true),
+                             styleLabelRect, p.textSecondary);
+            drawStyleGroup(painter);
+        } else {
+            drawWeightRow(painter);
+        }
         const int previousRecommended = recommendedSize;
         const int previousMaximum = suggestedMaxSize;
         const float previousMin = supportedMinSize;
@@ -839,10 +1040,17 @@ struct FontPickerDialog::Impl {
                 *row = rowAt(true, x, y);
             return kIdFamilyList;
         }
-        if (contains(styleRect, x, y)) {
-            if (option)
-                *option = styleOptionAt(x, y);
-            return kIdStyleGroup;
+        if (interfaceFont) {
+            if (contains(styleRect, x, y)) {
+                if (option)
+                    *option = styleOptionAt(x, y);
+                return kIdStyleGroup;
+            }
+        } else {
+            if (contains(weightSliderRect, x, y))
+                return kIdWeightSlider;
+            if (contains(italicRect, x, y))
+                return kIdItalicToggle;
         }
         if (!interfaceFont && contains(sizeEditRect, x, y))
             return kIdSizeEdit;
@@ -861,7 +1069,7 @@ struct FontPickerDialog::Impl {
     std::vector<int> focusOrder() const {
         if (interfaceFont)
             return {kIdFilterEdit, kIdFamilyList, kIdStyleGroup, kIdOk, kIdCancel};
-        return {kIdFilterEdit, kIdFamilyList, kIdStyleGroup, kIdSizeEdit,
+        return {kIdFilterEdit, kIdFamilyList, kIdWeightSlider, kIdItalicToggle, kIdSizeEdit,
                 kIdSizeList, kIdOk, kIdCancel};
     }
 
@@ -1083,6 +1291,13 @@ struct FontPickerDialog::Impl {
                         selectSize(row);
                     SetCapture(hwnd);
                 }
+            } else if (id == kIdWeightSlider) {
+                draggingWeight = true;
+                SetCapture(hwnd);
+                setWeight(weightAtX(x));
+            } else if (id == kIdItalicToggle) {
+                toggleItalic();
+                SetCapture(hwnd);
             } else if (id == kIdStyleGroup) {
                 if (option >= 0) {
                     selectStyle(option);
@@ -1221,6 +1436,22 @@ struct FontPickerDialog::Impl {
                 }
                 return 0;
             }
+            if (focusedId == kIdWeightSlider &&
+                (wp == VK_LEFT || wp == VK_RIGHT || wp == VK_HOME || wp == VK_END)) {
+                if (wp == VK_HOME)
+                    setWeight(kMinimumFontWeight);
+                else if (wp == VK_END)
+                    setWeight(kMaximumFontWeight);
+                else
+                    setWeight(weightValue + (wp == VK_RIGHT ? 1 : -1) *
+                                                (isShiftDown() ? kWeightFineKeyStep
+                                                               : kWeightKeyStep));
+                return 0;
+            }
+            if (focusedId == kIdItalicToggle && (wp == VK_SPACE || wp == VK_RETURN)) {
+                toggleItalic();
+                return 0;
+            }
             if ((wp == VK_LEFT || wp == VK_RIGHT) && focusedId == kIdStyleGroup) {
                 const int direction = wp == VK_RIGHT ? 1 : -1;
                 selectStyle((styleSelected + direction + static_cast<int>(styleNames().size())) %
@@ -1287,14 +1518,22 @@ struct FontPickerDialog::Impl {
         filterRect = D2D1::RectF(pad, filterY, std::max(pad, w - pad),
                                  filterY + fluent::metrics::controlHeight);
 
-        const float styleY = filterY + fluent::metrics::controlHeight + gap;
-        const float styleLabelW = 48.0f;
-        styleLabelRect = D2D1::RectF(pad, styleY, pad + styleLabelW,
-                                     styleY + fluent::metrics::controlHeight);
-        styleRect = D2D1::RectF(pad + styleLabelW + gap,
-                                styleY,
-                                std::max(pad + styleLabelW + gap, w - pad),
-                                styleY + fluent::metrics::controlHeight);
+        const float weightY = filterY + fluent::metrics::controlHeight + gap;
+        const float rowLeft = pad + kWeightLabelWidth;
+        const float rowRight = std::max(rowLeft, w - pad);
+        weightLabelRect = D2D1::RectF(pad, weightY, pad + kWeightLabelWidth,
+                                      weightY + fluent::metrics::controlHeight);
+        styleLabelRect = weightLabelRect; // 界面字体复用同一位置的样式标题
+        italicRect = D2D1::RectF(std::max(rowLeft, rowRight - kItalicToggleWidth), weightY, rowRight,
+                                 weightY + fluent::metrics::controlHeight);
+        weightValueRect = D2D1::RectF(
+            std::max(rowLeft, italicRect.left - gap - kWeightValueWidth), weightY,
+            std::max(rowLeft, italicRect.left - gap), weightY + fluent::metrics::controlHeight);
+        weightSliderRect = D2D1::RectF(
+            rowLeft + gap, weightY, std::max(rowLeft + gap, weightValueRect.left - gap),
+            weightY + fluent::metrics::controlHeight);
+        styleRect = D2D1::RectF(rowLeft + gap, weightY, rowRight,
+                                weightY + fluent::metrics::controlHeight);
 
         const float previewH = 96.0f;
         const float buttonH = fluent::metrics::controlHeight;
@@ -1327,9 +1566,9 @@ struct FontPickerDialog::Impl {
         okRect = D2D1::RectF(w - pad - cancelW - gap - okW, buttonY,
                              w - pad - cancelW - gap, buttonY + buttonH);
         fluent::offsetDialogRects(content.offsetX, {
-            &titleRect, &subtitleRect, &filterRect, &styleLabelRect,
-            &styleRect, &familyListRect, &sizeEditRect, &sizeListRect,
-            &previewRect, &okRect, &cancelRect});
+            &titleRect, &subtitleRect, &filterRect, &weightLabelRect, &weightSliderRect,
+            &weightValueRect, &italicRect, &styleLabelRect, &styleRect, &familyListRect,
+            &sizeEditRect, &sizeListRect, &previewRect, &okRect, &cancelRect});
         styleOptionRects.clear();
         clampScroll(true);
         clampScroll(false);
@@ -1350,11 +1589,13 @@ FontPickerDialog::~FontPickerDialog() {
 }
 
 bool FontPickerDialog::create(HINSTANCE inst, HWND parent, const std::wstring& family,
-                              float sizePt, LyricFontStyle style, bool interfaceFont) {
+                              float sizePt, LyricFontStyle style, int weight,
+                              bool interfaceFont) {
     impl_->notifyHwnd = parent; // 仅用于关闭通知；托盘窗口是消息窗口，不能作为所有者
     impl_->initFamily = family;
     impl_->initSize = sizePt;
     impl_->initStyle = style;
+    impl_->initWeight = weight;
     impl_->interfaceFont = interfaceFont;
 
     WNDCLASSEXW wc{};

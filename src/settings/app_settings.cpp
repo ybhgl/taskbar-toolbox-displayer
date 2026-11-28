@@ -410,6 +410,11 @@ void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
         fontFamily_ = fam;
     fontSize_ = (float)j.value("fontSize", 16.0);
     fontStyle_ = fontStyleOf(j.value("fontStyle", std::string("normal")));
+    // 旧配置没有 fontWeight：粗体样式迁移为 700 档，其余保持常规。
+    int storedWeight = legacyFontStyleWeight(fontStyle_);
+    if (const auto it = j.find("fontWeight"); it != j.end() && it->is_number())
+        storedWeight = it->get<int>();
+    fontWeight_ = clampFontWeight(storedWeight);
     uiFontSource_ = static_cast<UiFontSource>(std::clamp(j.value("uiFontSource", 0), 0, 2));
     const auto uiFamily = wideOf(j.value("uiFontFamily", std::string()));
     if (!uiFamily.empty())
@@ -765,6 +770,7 @@ nlohmann::json AppSettings::toJson() const {
     j["fontFamily"] = utf8Of(fontFamily_);
     j["fontSize"] = fontSize_;
     j["fontStyle"] = fontStyleName(fontStyle_);
+    j["fontWeight"] = clampFontWeight(fontWeight_);
     j["uiFontSource"] = static_cast<int>(uiFontSource_);
     j["uiFontFamily"] = utf8Of(uiFontFamily_);
     j["uiFontStyle"] = fontStyleName(uiFontStyle_);

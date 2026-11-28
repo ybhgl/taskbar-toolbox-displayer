@@ -502,6 +502,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
     float compactTaskbarHeight_ = 0.0f;
     std::wstring fontFamily_ = kDefaultUiFontFamily;
     LyricFontStyle fontStyle_ = LyricFontStyle::Normal;
+    int fontWeight_ = kDefaultFontWeight;
 
     // 媒体信息
     OverlayMediaInfo media;
@@ -3727,7 +3728,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
     void recreateClockFormats() {
         typesetter_.setFactory(renderer.dwrite());
         typesetter_.recreateClockFormats(
-            fontFamily_, fontStyle_,
+            fontFamily_, fontStyle_, fontWeight_,
             fitCompactFontSize(fluent::font_sizes::taskbar::clock,
                                (compactTaskbarHeight_ - 2.0f) * 0.56f,
                                DWRITE_FONT_WEIGHT_SEMI_BOLD),
@@ -3763,7 +3764,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
                                     ? 12.0f
                                     : fluent::font_sizes::taskbar::resource;
         const float fitted = fitCompactFontSize(requested, compactTaskbarHeight_ - 2.0f);
-        if (!typesetter_.ensureResourceFormat(fontFamily_, fontStyle_, fitted))
+        if (!typesetter_.ensureResourceFormat(fontFamily_, fontStyle_, fontWeight_, fitted))
             return false;
         const float verticalAvailable =
             ResourcePanel::verticalAvailableWidth(verticalResourceWidthDip());
@@ -3776,7 +3777,8 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
                     fluent::font_sizes::taskbar::minimum, fitted);
                 if (shrunk + 0.05f < fitted) {
                     typesetter_.resetResourceFormat();
-                    if (!typesetter_.ensureResourceFormat(fontFamily_, fontStyle_, shrunk))
+                    if (!typesetter_.ensureResourceFormat(fontFamily_, fontStyle_, fontWeight_,
+                                                          shrunk))
                         return false;
                 }
             }
@@ -3804,11 +3806,11 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         if (!dwrite)
             return requested;
         IDWriteTextFormat* format = nullptr;
-        if (FAILED(dwrite->CreateTextFormat(fontFamily_.c_str(), nullptr,
-                                            isBoldFontStyle(fontStyle_) ? DWRITE_FONT_WEIGHT_BOLD
-                                                                        : weight,
-                                            dwriteStyleOf(fontStyle_), DWRITE_FONT_STRETCH_NORMAL,
-                                            requested, L"zh-cn", &format)))
+        if (FAILED(dwrite->CreateTextFormat(
+                fontFamily_.c_str(), nullptr,
+                dwriteWeightOf(shiftFontWeight(static_cast<int>(weight), fontWeight_)),
+                dwriteStyleOf(fontStyle_), DWRITE_FONT_STRETCH_NORMAL, requested, L"zh-cn",
+                &format)))
             return requested;
         fluent::applyUiFontFallback(format);
         IDWriteTextLayout* sample = nullptr;
@@ -3869,12 +3871,14 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         sizes.next = fontSize_ * fluent::font_sizes::taskbar::previewScale;
         sizes.secondary = fontSize_ * 0.78f;
         typesetter_.setFactory(dwrite);
-        typesetter_.recreateLyricFormats(fontFamily_, fontStyle_, sizes);
+        typesetter_.recreateLyricFormats(fontFamily_, fontStyle_, fontWeight_, sizes);
         requestInvalidation(RenderInvalidation::Text);
         requestInvalidation(RenderInvalidation::SongInfo);
     }
 
-    void changeFont(float delta) { setFont(fontFamily_, fontSize_ + delta, fontStyle_); }
+    void changeFont(float delta) {
+        setFont(fontFamily_, fontSize_ + delta, fontStyle_, fontWeight_);
+    }
 
     LyricFontSizeContext fontSizeContext() const {
         LyricFontSizeContext context;
@@ -3905,11 +3909,29 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         return context;
     }
 
-    void setFont(const std::wstring& family, float size, LyricFontStyle style) {
+    void setResourceLaunchTarget(bool enabled, const std::wstring& appPath) {
+        resourceLaunchEnabled_ = enabled;
+        resourceLaunchApp_ = appPath;
+        lastResourceClickTime_ = 0;
+    }
+
+    void setEmbeddedWidthPolicy(bool autoWidth, int maxWidthDip) {
+        const int clamped = clampEmbeddedMaxWidth(maxWidthDip);
+        if (embeddedAutoWidth_ == autoWidth && embeddedMaxWidthDip_ == clamped)
+            return;
+        embeddedAutoWidth_ = autoWidth;
+        embeddedMaxWidthDip_ = clamped;
+        adjustPosition();
+        requestInvalidation(RenderInvalidation::Layout);
+        requestFrameAndFlush();
+    }
+
+    void setFont(const std::wstring& family, float size, LyricFontStyle style, int weight) {
         fontFamily_ = family;
         fontSize_ = std::clamp(size, fluent::font_sizes::taskbar::minimum,
                              fluent::font_sizes::taskbar::maximum);
         fontStyle_ = style;
+        fontWeight_ = clampFontWeight(weight);
         recreateFormats();
         requestInvalidation(RenderInvalidation::Layout);
         if (hwnd &&
@@ -8760,9 +8782,22 @@ LyricFontSizeContext TaskbarHost::fontSizeContext() const {
     });
 }
 
-void TaskbarHost::setFont(const std::wstring& family, float size, LyricFontStyle style) {
+void TaskbarHost::setResourceLaunchTarget(bool enabled, const std::wstring& appPath) {
     thread_->invoke([=, this]() mutable {
-        impl_->setFont(family, size, style);
+        impl_->setResourceLaunchTarget(enabled, appPath);
+    });
+}
+
+void TaskbarHost::setEmbeddedWidthPolicy(bool autoWidth, int maxWidthDip) {
+    thread_->invoke([=, this]() mutable {
+        impl_->setEmbeddedWidthPolicy(autoWidth, maxWidthDip);
+    });
+}
+
+void TaskbarHost::setFont(const std::wstring& family, float size, LyricFontStyle style,
+                          int weight) {
+    thread_->invoke([=, this]() mutable {
+        impl_->setFont(family, size, style, weight);
     });
 }
 

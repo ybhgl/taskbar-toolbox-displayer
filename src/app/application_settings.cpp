@@ -1604,7 +1604,9 @@ SettingsState App::currentSettingsState() const {
     prepareGenericSmtcRuleIcons(st.genericSmtcRules);
     st.fontDesc = settings_.fontFamily_ + L", " +
                   std::to_wstring(static_cast<int>(std::lround(settings_.fontSize_))) + L"px, " +
-                  fontStyleLabel(settings_.fontStyle_);
+                  fontWeightName(settings_.fontWeight_);
+    if (isItalicFontStyle(settings_.fontStyle_))
+        st.fontDesc += L", 斜体";
     st.uiFontSource = settings_.uiFontSource_;
     const bool useDefault = settings_.uiFontSource_ == UiFontSource::Default;
     const AppSettings defaults;

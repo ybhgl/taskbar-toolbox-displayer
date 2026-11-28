@@ -26,7 +26,8 @@ public:
         LyricAppearance dark;
         LyricAppearance globalTheme;                       // 全局模式正在使用的共享配置
         std::wstring fontFamily;                           // 预览用字体族，空则用 UI 默认字体
-        LyricFontStyle fontStyle = LyricFontStyle::Normal; // 预览用字体样式
+        LyricFontStyle fontStyle = LyricFontStyle::Normal; // 预览用字体样式（仅斜体生效）
+        int fontWeight = kDefaultFontWeight;               // 预览用字重，与任务栏主歌词一致
         float lyricFontSize = fluent::font_sizes::taskbar::colorPreview; // 预览用歌词字号（与实际任务栏渲染字号一致）
     };
 

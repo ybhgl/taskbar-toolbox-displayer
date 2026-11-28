@@ -1153,9 +1153,9 @@ void App::onUpdatePromptCommand(int command) {
 }
 
 void App::pickFont() {
-    runtime_log::writef(L"[action][dialog] open=font-picker current-family=%s size=%.1f style=%s",
+    runtime_log::writef(L"[action][dialog] open=font-picker current-family=%s size=%.1f weight=%d",
                         settings_.fontFamily_.c_str(), static_cast<double>(settings_.fontSize_),
-                        fontStyleLabel(settings_.fontStyle_));
+                        settings_.fontWeight_);
     if (!taskbarHost)
         return;
     if (fontPickerDialog && fontPickerDialog->isOpen()) {
@@ -1164,7 +1164,8 @@ void App::pickFont() {
     }
     fontPickerDialog = std::make_unique<FontPickerDialog>();
     if (!fontPickerDialog->create(GetModuleHandleW(nullptr), trayHwnd, settings_.fontFamily_,
-                                  settings_.fontSize_, settings_.fontStyle_)) {
+                                  settings_.fontSize_, settings_.fontStyle_,
+                                  settings_.fontWeight_)) {
         fontPickerDialog.reset();
         return;
     }
@@ -1178,19 +1179,21 @@ void App::pickFont() {
         return contexts;
     });
     fontPickerDialog->setApplyCallback([this](const std::wstring& family, float size,
-                                              LyricFontStyle style) {
+                                              LyricFontStyle style, int weight) {
         settings_.fontFamily_ = family;
         settings_.fontSize_ = std::clamp(size, 4.0f, 96.0f);
         settings_.fontStyle_ = style;
+        settings_.fontWeight_ = clampFontWeight(weight);
         settings_.hasUserFont_ = true;
         if (settings_.uiFontSource_ == UiFontSource::FollowGeneral) {
             applyUiFont();
         }
-        runtime_log::writef(L"[action][font] applied family=%s size=%.1f style=%s",
+        runtime_log::writef(L"[action][font] applied family=%s size=%.1f weight=%d style=%s",
                             settings_.fontFamily_.c_str(), static_cast<double>(settings_.fontSize_),
-                            fontStyleLabel(settings_.fontStyle_));
+                            settings_.fontWeight_, fontStyleLabel(settings_.fontStyle_));
         forEachHost([&](TaskbarHost* host) {
-            host->setFont(settings_.fontFamily_, settings_.fontSize_, settings_.fontStyle_);
+            host->setFont(settings_.fontFamily_, settings_.fontSize_, settings_.fontStyle_,
+                          settings_.fontWeight_);
         });
         saveSettings();
         if (settingsDialog)
@@ -1208,9 +1211,10 @@ void App::pickUiFont() {
     }
     auto dialog = std::make_unique<FontPickerDialog>();
     if (!dialog->create(GetModuleHandleW(nullptr), trayHwnd, settings_.uiFontFamily_,
-                         14.0f, settings_.uiFontStyle_, true))
+                         14.0f, settings_.uiFontStyle_, kDefaultFontWeight, true))
         return;
-    dialog->setApplyCallback([this](const std::wstring& family, float, LyricFontStyle style) {
+    dialog->setApplyCallback([this](const std::wstring& family, float, LyricFontStyle style,
+                                    int) {
         settings_.uiFontFamily_ = family;
         settings_.uiFontStyle_ = style;
         applyUiFont();
@@ -1239,6 +1243,7 @@ void App::showFontColorDialog() {
     st.globalTheme = settings_.globalLyricAppearance_;
     st.fontFamily = settings_.fontFamily_;
     st.fontStyle = settings_.fontStyle_;
+    st.fontWeight = settings_.fontWeight_;
     // 与任务栏实际渲染共用基准、范围和主歌词比例。
     float baseSize = settings_.hasUserFont_ ? settings_.fontSize_ : fluent::font_sizes::taskbar::base;
     st.lyricFontSize = std::clamp(baseSize, fluent::font_sizes::taskbar::minimum,

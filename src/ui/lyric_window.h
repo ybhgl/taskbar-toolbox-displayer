@@ -113,7 +113,8 @@ public:
     virtual std::wstring statusText() const = 0;
 
     virtual void changeFont(float delta) = 0;
-    virtual void setFont(const std::wstring& family, float size, LyricFontStyle style) = 0;
+    virtual void setFont(const std::wstring& family, float size, LyricFontStyle style,
+                         int weight) = 0;
     // 歌词颜色：已播放色 + 逐字未播放色（含不透明度，单位 %）。LRC 单行歌词只用已播放色
 
     virtual void show() = 0;

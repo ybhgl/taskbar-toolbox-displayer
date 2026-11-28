@@ -52,6 +52,7 @@ struct AppSettings {
     std::wstring fontFamily_ = kDefaultUiFontFamily; // 与普通窗口默认字体族一致
     float fontSize_ = 16.0f;
     LyricFontStyle fontStyle_ = LyricFontStyle::Normal;
+    int fontWeight_ = kDefaultFontWeight; // 100-900，仅表达字重；斜体仍由 fontStyle_ 表达
     UiFontSource uiFontSource_ = UiFontSource::Independent;
     std::wstring uiFontFamily_ = kDefaultUiFontFamily;
     LyricFontStyle uiFontStyle_ = LyricFontStyle::Normal;

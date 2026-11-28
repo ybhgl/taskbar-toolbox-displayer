@@ -80,11 +80,12 @@ public:
     // 绘制侧只借用资源；创建、替换和释放统一由排版组件执行。
     const Resources& resources() const { return resources_; }
     void recreateLyricFormats(const std::wstring& family, LyricFontStyle style,
-                              const LyricFontSizes& sizes);
-    void recreateClockFormats(const std::wstring& family, LyricFontStyle style, float timeSize,
-                              float dateSize);
+                              int configuredWeight, const LyricFontSizes& sizes);
+    void recreateClockFormats(const std::wstring& family, LyricFontStyle style,
+                              int configuredWeight, float timeSize, float dateSize);
     void createDragPreviewFormat();
-    bool ensureResourceFormat(const std::wstring& family, LyricFontStyle style, float size);
+    bool ensureResourceFormat(const std::wstring& family, LyricFontStyle style,
+                              int configuredWeight, float size);
     void resetResourceFormat() { resources_.fmtResource_.Reset(); }
     SongTextMetrics buildSongInfo(const std::wstring& title, const std::wstring& artist,
                                   bool visible, float verticalColumnWidth);
@@ -118,8 +119,9 @@ private:
                                         bool rotateLatinRuns = true);
     void buildVerticalContent(const LyricTextInput& input, LyricTextMetrics& metrics);
     void createFormat(Microsoft::WRL::ComPtr<IDWriteTextFormat>& format, const std::wstring& family,
-                      LyricFontStyle style, float size, DWRITE_FONT_WEIGHT weight,
-                      DWRITE_TEXT_ALIGNMENT alignment, const wchar_t* locale = L"zh-cn");
+                      LyricFontStyle style, int configuredWeight, float size,
+                      DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT alignment,
+                      const wchar_t* locale = L"zh-cn");
     IDWriteFactory* factory_ = nullptr; // renderer 持有，仅排版调用期间借用
     Resources resources_;
 };
