@@ -42,6 +42,8 @@ public:
     void setFollowAlbumBackground(bool on);
     void setAutoTextContrast(bool on);
     void setSongTransitionEnabled(bool on);
+    // 媒体卡片内是否显示桌宠；关闭时不绘制且不驱动动画。
+    void setDockPetVisible(bool on);
     void refreshTheme();
     // animateSongTransition 只由完整展示帧在确认切歌时传入；媒体字段异步补齐不触发转场。
     void setMedia(const OverlayMediaInfo& info, bool available,

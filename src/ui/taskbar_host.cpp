@@ -347,6 +347,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
     void applyPopupAppearance(const TaskbarAppearance& value) {
         if (!appearance_ || appearance_->songTransitionEnabled != value.songTransitionEnabled)
             mediaPopup.setSongTransitionEnabled(value.songTransitionEnabled);
+            mediaPopup.setDockPetVisible(value.dockPetVisible);
         if (!appearance_ || appearance_->controlsOnHover != value.controlsOnHover)
             setControlsOnHover(value.controlsOnHover);
         if (!appearance_ || appearance_->hoverControlStyle != value.hoverControlStyle)
@@ -3410,6 +3411,9 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
     }
 
     DockPetMode dockPetMode() const {
+        // 桌宠默认关闭；关闭时不绘制，也不占用歌词安全区。
+        if (!appearance_ || !appearance_->dockPetVisible)
+            return DockPetMode::Hidden;
         if (!horizontalImmersiveMode() || !isSessionVisible() || isMinimalMode() || isStoppedMode())
             return DockPetMode::Hidden;
         if (scene_ == DisplayScene::Idle)
@@ -4623,7 +4627,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         // 右边界统一落在频谱之前，左边界统一落在封面/歌曲信息/沉浸控件之后。
         float left = layout.leftW + start + layout.immersiveControlsW;
         if (horizontalImmersiveMode() && scene != DisplayScene::Idle && isSessionVisible() &&
-            !isMinimalMode() && !isStoppedMode())
+            !isMinimalMode() && !isStoppedMode() && appearance_ && appearance_->dockPetVisible)
             left += kDockPetSeatW;
         const float right = layout.w - rightSideExtraForScene(scene, layout.w) - kTextPadding;
         return {left, std::max(1.0f, right - left)};

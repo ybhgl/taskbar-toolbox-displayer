@@ -356,6 +356,11 @@ void SettingsSections::onCommand(int id, int option) {
         if (actions.onCoverEffectVinyl)
             actions.onCoverEffectVinyl(row->selected == 1);
         break;
+    case kIdDockPetVisible:
+        row->checked = !row->checked;
+        if (actions.onDockPetVisible)
+            actions.onDockPetVisible(row->checked);
+        break;
     case kIdTaskbarContextMenu:
         row->checked = !row->checked;
         if (actions.onTaskbarContextMenu)

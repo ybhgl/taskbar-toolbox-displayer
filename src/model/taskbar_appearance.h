@@ -58,6 +58,8 @@ struct TaskbarAppearance {
     int dockBackgroundBlur{};
     DockResourceVisibility dockResourceVisibility{};
     bool albumCoverVisible{};
+    // Dock/沉浸任务栏与媒体卡片是否显示桌宠。
+    bool dockPetVisible{};
     bool songTransitionEnabled = true;
     bool platformIconVisible{};
     bool contextMenuEnabled{};

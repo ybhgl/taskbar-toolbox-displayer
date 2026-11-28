@@ -384,6 +384,8 @@ void SettingsSections::syncDisplayRows(const SettingsState& s) {
     }
     if (auto* row = findRow(kIdTaskbarContextMenu))
         row->checked = s.taskbarContextMenu;
+    if (auto* row = findRow(kIdDockPetVisible))
+        row->checked = s.dockPetVisible;
 }
 
 void SettingsSections::syncTaskbarModeRows(const SettingsState& s) {

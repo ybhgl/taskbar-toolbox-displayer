@@ -73,6 +73,7 @@ TaskbarAppearance resolveTaskbarAppearance(const AppSettings& settings,
                                  settings.dockResourceHideLabels_, settings.dockResourcePlacement_,
                                  settings.dockResourceOrder_};
     result.albumCoverVisible = settings.albumCoverVisible_;
+    result.dockPetVisible = settings.dockPetVisible_;
     result.songTransitionEnabled = settings.songTransitionEnabled_;
     result.platformIconVisible = settings.platformIconVisible_;
     result.contextMenuEnabled = settings.taskbarContextMenuEnabled_;

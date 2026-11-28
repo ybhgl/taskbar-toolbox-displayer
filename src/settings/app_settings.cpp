@@ -661,6 +661,11 @@ void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
         idleQuoteAlignment_ = LyricAlignment::Left;
     songInfoVisible_ = j.value("songInfoVisible", true);
     albumCoverVisible_ = j.value("albumCoverVisible", true);
+    dockPetVisible_ = j.value("dockPetVisible", false);
+    resourceDoubleClickLaunch_ = j.value("resourceDoubleClickLaunch", false);
+    const auto resourceLaunchApp = wideOf(j.value("resourceLaunchApp", std::string()));
+    if (!resourceLaunchApp.empty())
+        resourceLaunchApp_ = resourceLaunchApp;
     platformIconVisible_ = j.value("platformIconVisible", false);
     albumCoverEffect_ = j.value("albumCoverEffect", std::string("default")) == "vinyl"
                             ? AlbumCoverEffect::Vinyl
@@ -964,6 +969,9 @@ nlohmann::json AppSettings::toJson() const {
                                                                              : "left";
     j["songInfoVisible"] = songInfoVisible_;
     j["albumCoverVisible"] = albumCoverVisible_;
+    j["dockPetVisible"] = dockPetVisible_;
+    j["resourceDoubleClickLaunch"] = resourceDoubleClickLaunch_;
+    j["resourceLaunchApp"] = utf8Of(resourceLaunchApp_);
     j["platformIconVisible"] = platformIconVisible_;
     j["albumCoverEffect"] = albumCoverEffect_ == AlbumCoverEffect::Vinyl ? "vinyl" : "default";
     j["qqLocalLyricsEnabled"] = qqLocalLyricsEnabled_;

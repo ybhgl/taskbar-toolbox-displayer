@@ -79,6 +79,11 @@ void SettingsSections::createDisplayRows() {
     addRadio(0, kIdCoverEffect, L"专辑封面效果", nullptr, {L"默认", L"黑胶唱片"},
              minimal ? 0 : (state.coverEffectVinyl ? 1 : 0), state.albumCoverVisible && !minimal,
              kCoverEffectRowH);
+    addHeader(0, L"桌宠");
+    Row& dockPet = addRow(0, kIdDockPetVisible, ControlKind::Toggle, L"显示桌宠",
+                          L"在 Dock/沉浸任务栏与媒体卡片中显示小宠物；关闭后这两处都不再出现宠物。",
+                          40.0f, kRowTallH);
+    dockPet.checked = state.dockPetVisible;
     addHeader(0, L"菜单交互");
     Row& taskbarContextMenu = addRow(
         0, kIdTaskbarContextMenu, ControlKind::Toggle, L"右键显示任务栏歌词菜单",

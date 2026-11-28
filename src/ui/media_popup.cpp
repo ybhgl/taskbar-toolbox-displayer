@@ -125,6 +125,7 @@ struct MediaPopup::Impl {
     UINT scrollTimerInterval = 0; // kScrollTimer 当前实际间隔，用于按驱动目的切换帧率
     bool clientAnimations = true;
     bool songTransitionEnabled = true;
+    bool dockPetVisible = false;
     bool songTransitionPending = false;
     bool songRootAnimationInstalled = false;
     media_popup_detail::LayerTransition categoryTransition;
@@ -1053,7 +1054,8 @@ struct MediaPopup::Impl {
     // 宠物状态由媒体快照驱动，弹窗隐藏期间也保持同步，暂停计时与 Dock 一致。
     void syncPetMode(bool trackChanged) {
         const ULONGLONG now = GetTickCount64();
-        const DockPetMode mode = !available    ? DockPetMode::Hidden
+        const DockPetMode mode = (!available || !dockPetVisible)
+                                     ? DockPetMode::Hidden
                                  : media.playing ? DockPetMode::Listening
                                                  : DockPetMode::Paused;
         pet.setMode(mode, now);
@@ -1942,6 +1944,8 @@ struct MediaPopup::Impl {
                 releaseDrawingResources(L"song-animation-reset-commit-failed");
         }
     }
+
+    void setDockPetVisible(bool on) { dockPetVisible = on; }
 
     bool render() {
         // 仅打开准备阶段和可见阶段允许创建设备，隐藏后的消息不能重建缓存。
@@ -3775,6 +3779,10 @@ void MediaPopup::setAutoTextContrast(bool on) {
 
 void MediaPopup::setSongTransitionEnabled(bool on) {
     enqueue([=, this] { impl_->setSongTransitionEnabled(on); });
+}
+
+void MediaPopup::setDockPetVisible(bool on) {
+    enqueue([=, this] { impl_->setDockPetVisible(on); });
 }
 
 void MediaPopup::refreshTheme() {

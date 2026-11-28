@@ -148,6 +148,11 @@ struct AppSettings {
     LyricAlignment idleQuoteAlignment_ = LyricAlignment::Left;
     bool songInfoVisible_ = true;
     bool albumCoverVisible_ = true;
+    // 桌宠：Dock/沉浸任务栏与媒体卡片里的小宠物是否显示，默认关闭。
+    bool dockPetVisible_ = false;
+    // 双击资源监视区域启动指定应用（默认关闭）。
+    bool resourceDoubleClickLaunch_ = false;
+    std::wstring resourceLaunchApp_;
     bool platformIconVisible_ = false;
     AlbumCoverEffect albumCoverEffect_ = AlbumCoverEffect::Default;
     bool qqLocalLyricsEnabled_ = false;

@@ -47,6 +47,10 @@ enum class Kind {
     Duration,
     Fullscreen,
     Position,
+    // 宽度/长度类设置：左右双向箭头 + 两端边界。
+    Width,
+    // 桌宠开关：爪印。
+    Pet,
     DoubleLine,
     Alignment,
     LocalLyrics,
