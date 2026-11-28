@@ -1,5 +1,7 @@
 #include "app/application_internal.h"
 #include "settings/display_rules.h"
+#include "ui/font_style.h"
+#include <algorithm>
 #include <cwchar>
 
 namespace lyrics_app {

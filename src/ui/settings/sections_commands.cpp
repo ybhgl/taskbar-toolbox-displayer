@@ -24,6 +24,17 @@ bool SettingsSections::onIdleCommand(int id, Row* row, int option) {
         if (actions.onQuickStartEnabled)
             actions.onQuickStartEnabled(row->checked);
         break;
+    case kIdResourceDoubleClickLaunch:
+        row->checked = !row->checked;
+        state.resourceDoubleClickLaunch = row->checked;
+        updateIdleRowsEnabled();
+        if (actions.onResourceDoubleClickLaunch)
+            actions.onResourceDoubleClickLaunch(row->checked);
+        break;
+    case kIdResourceLaunchApp:
+        if (actions.onPickResourceLaunchApp)
+            actions.onPickResourceLaunchApp();
+        break;
     case kIdIdleQuote:
         state.idleTextMode = row->selected;
         updateIdleRowsEnabled();

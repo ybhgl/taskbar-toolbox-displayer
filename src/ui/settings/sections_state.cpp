@@ -335,6 +335,10 @@ void SettingsSections::updateIdleRowsEnabled() {
         row->enabled = !minimalModeActive() && state.quickStartEnabled;
     if (auto* row = findRow(kIdQuickStartEnabled))
         row->enabled = !minimalModeActive();
+    if (auto* row = findRow(kIdResourceDoubleClickLaunch))
+        row->enabled = state.resourceMonitorActive;
+    if (auto* row = findRow(kIdResourceLaunchApp))
+        row->enabled = state.resourceMonitorActive && state.resourceDoubleClickLaunch;
 }
 
 void SettingsSections::updateCompactLyricRows() {
@@ -361,6 +365,10 @@ void SettingsSections::syncIdleRows(const SettingsState& s) {
         row->selected = std::clamp(s.idleQuoteBackgroundScope, 0, 3);
     if (auto* row = findRow(kIdIdleApps))
         row->checked = s.idleAppNamesVisible;
+    if (auto* row = findRow(kIdResourceDoubleClickLaunch))
+        row->checked = s.resourceDoubleClickLaunch;
+    if (auto* row = findRow(kIdResourceLaunchApp))
+        row->controlText = s.resourceLaunchAppName.empty() ? L"选择…" : s.resourceLaunchAppName;
     if (auto* row = findRow(kIdTickTickEnabled))
         row->checked = s.tickTickEnabled;
     updateIdleQuoteSourceRow();

@@ -236,6 +236,17 @@ void SettingsSections::createIdleRows() {
     idleApps.checked = state.idleAppNamesVisible;
     idleApps.height = idleApps.minHeight;
     idleApps.enabled = state.quickStartEnabled;
+    Row& resourceLaunch = addRow(
+        kIdlePage, kIdResourceDoubleClickLaunch, ControlKind::Toggle, L"双击启动应用",
+        L"双击资源监视区域可快捷启动指定应用。", 40.0f, kRowTallH);
+    resourceLaunch.checked = state.resourceDoubleClickLaunch;
+    resourceLaunch.enabled = state.resourceMonitorActive;
+    Row& resourceLaunchApp = addButton(
+        kIdlePage, kIdResourceLaunchApp, L"启动的应用",
+        L"选择双击资源监视区域时要启动的程序（.exe）。",
+        state.resourceLaunchAppName.empty() ? L"选择…" : state.resourceLaunchAppName.c_str(),
+        kRowTallH);
+    resourceLaunchApp.enabled = state.resourceMonitorActive && state.resourceDoubleClickLaunch;
     updateIdleRowsEnabled();
     addHeader(kIdlePage, L"滴答清单");
     Row& tickTickEnabled =

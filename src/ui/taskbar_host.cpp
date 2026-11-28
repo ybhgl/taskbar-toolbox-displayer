@@ -528,6 +528,10 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
     std::vector<TaskbarAnchorOption> publishedAnchorOptions_;
     bool mouseOver_ = false;
     bool resourceHovered_ = false;
+    bool resourceLaunchEnabled_ = false;
+    std::wstring resourceLaunchApp_;
+    DWORD lastResourceClickTime_ = 0;
+    POINT lastResourceClickPos_{};
     bool verticalResourceHovered_ = false;
     bool trackingLeave_ = false;
     int immersiveControlHover_ = -1;
@@ -1480,6 +1484,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         syncCompactTaskbarLayout(vertical ? 0 : crossPx);
 
         int gap = std::max(4, (int)std::lround(4.0f * scale()));
+        const std::vector<std::pair<int, int>> occupied = occupiedIntervals();
         float minWidthDip = vertical ? kVerticalMinLengthDip : kMinWidthDip;
         float maxWidthDip = vertical ? taskbar_detail::kVerticalBaseLengthDip : kMaxWidthDip;
         float compressedMinWidthDip = minWidthDip * kCompressedMinWidthRatio;
@@ -1565,7 +1570,7 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         input.crossPixels = crossPx;
         input.crossMargin = crossMargin;
         input.minDistinctAnchorOffset = std::max(24, (int)std::lround(32.0f * scale()));
-        input.occupied = occupiedIntervals();
+        input.occupied = occupied;
         return true;
     }
 
@@ -3227,6 +3232,42 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
         logicalClientPixelSize(pxW, pxH);
         const auto area = horizontalResourceRect(dip(pxW), dip(pxH));
         return x >= area.left && x <= area.right && y >= area.top && y <= area.bottom;
+    }
+
+    // 双击资源监视区域启动指定应用：自行按系统双击间隔与矩形判定，
+    // 这样不必给任务栏窗口类加 CS_DBLCLKS（避免影响其它子区域的点击语义）。
+    bool tryLaunchResourceAppOnDoubleClick(float mx, float my) {
+        if (!resourceLaunchEnabled_ || resourceLaunchApp_.empty())
+            return false;
+        if (!pointInResourceArea(mx, my))
+            return false;
+
+        const DWORD now = static_cast<DWORD>(GetMessageTime());
+        const int toleranceX = std::max(4, GetSystemMetrics(SM_CXDOUBLECLK) / 2);
+        const int toleranceY = std::max(4, GetSystemMetrics(SM_CYDOUBLECLK) / 2);
+        const bool withinTime =
+            lastResourceClickTime_ != 0 &&
+            now - lastResourceClickTime_ <= static_cast<DWORD>(GetDoubleClickTime());
+        const bool withinRect =
+            std::abs(static_cast<int>(mx) - lastResourceClickPos_.x) <= toleranceX &&
+            std::abs(static_cast<int>(my) - lastResourceClickPos_.y) <= toleranceY;
+
+        lastResourceClickTime_ = now;
+        lastResourceClickPos_ = POINT{static_cast<LONG>(mx), static_cast<LONG>(my)};
+        if (!withinTime || !withinRect)
+            return false;
+
+        lastResourceClickTime_ = 0;
+        launchResourceApp();
+        return true;
+    }
+
+    void launchResourceApp() const {
+        const DWORD attributes = GetFileAttributesW(resourceLaunchApp_.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
+            return;
+        ShellExecuteW(nullptr, L"open", resourceLaunchApp_.c_str(), nullptr, nullptr,
+                      SW_SHOWNORMAL);
     }
 
     bool hitDockResourceArea(float clientX, float clientY) const {
@@ -8278,6 +8319,18 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
             const auto pressedControlSession = std::exchange(pressedControlSessionGeneration_, 0);
             const bool sourceControlPressed = std::exchange(inlineSourcePressed_, false);
             const auto pressedSource = std::exchange(pressedCoverSource_, std::wstring{});
+            // 双击资源监视区启动指定应用。必须放在视图分支之前：内嵌模式的按下总会
+            // 进入拖动手势（hadPress 恒为真），而 Dock/AppBar 在展开分支会提前返回。
+            if (!drag_.dragging() &&
+                tryLaunchResourceAppOnDoubleClick(static_cast<float>(GET_X_LPARAM(lp)),
+                                                  static_cast<float>(GET_Y_LPARAM(lp)))) {
+                if (drag_.pressed())
+                    finishLyricDrag(false);
+                if (GetCapture() == hwnd)
+                    ReleaseCapture();
+                requestFrameAndFlush();
+                return 0;
+            }
             if (isExpandedView()) {
                 const int pressed = immersiveControlPressed_;
                 const int released = hitImmersiveControl(static_cast<float>(GET_X_LPARAM(lp)),
@@ -8352,7 +8405,8 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
             // 卡片的当前页面自己判断是否为点击展开；这样无播放时的每日一言卡片
             // 可以独立于媒体控件样式使用点击展开。
             else if (!pointInPinnedControlsZone(mx, my) && !hitVolumeButton(mx, my) &&
-                     !hitProgressButton(mx, my) && !isMinimalMode() && !isExpandedView())
+                     !hitProgressButton(mx, my) && !pointInResourceArea(mx, my) &&
+                     !isMinimalMode() && !isExpandedView())
                 mediaPopup.onAnchorClick();
             return 0;
         }

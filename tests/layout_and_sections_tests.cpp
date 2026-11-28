@@ -77,6 +77,27 @@ TEST_CASE("taskbar_placement.safe_compressed_relocated_nospace_and_forced_overla
     EXPECT_TRUE(placement.x + placement.width <= input.taskbar.right);
 }
 
+TEST_CASE("taskbar_placement.largest_free_span_for_embedded_auto_width") {
+    PlacementInput input{};
+    input.taskbar = {0, 1032, 1920, 1080};
+    input.edge = ABE_BOTTOM;
+    input.vertical = false;
+    input.gap = 6;
+    input.crossPixels = 48;
+
+    // 空白区 [400, 900] 与 [1460, 1700]，后者更短；应取最长的 [400, 900]。
+    input.occupied = {{0, 400}, {900, 1460}, {1700, 1920}};
+    EXPECT_EQ(taskbar_detail::largestFreeSpanMajor(input), 500 - 12);
+
+    // 图标移动后空白区变化，结果应随之更新（无需重启即可跟随）。
+    input.occupied = {{0, 200}, {1700, 1920}};
+    EXPECT_EQ(taskbar_detail::largestFreeSpanMajor(input), 1500 - 12);
+
+    // 占用区覆盖整条任务栏时没有可用空白区。
+    input.occupied = {{0, 1920}};
+    EXPECT_EQ(taskbar_detail::largestFreeSpanMajor(input), 0);
+}
+
 TEST_CASE("taskbar_layout.horizontal_vertical_and_dynamic_background_merging") {
     const D2D1_RECT_F playbackRects[] = {
         {0.0f, 0.0f, 120.0f, 40.0f},

@@ -158,6 +158,12 @@ TEST_CASE("app_settings.json_roundtrip_and_legacy_migrations") {
     original.fontFamily_ = L"Microsoft YaHei UI";
     original.fontSize_ = 15.5f;
     original.fontStyle_ = LyricFontStyle::BoldItalic;
+    original.fontWeight_ = 550;
+    original.embeddedAutoWidth_ = false;
+    original.embeddedMaxWidth_ = 640;
+    original.dockPetVisible_ = true;
+    original.resourceDoubleClickLaunch_ = true;
+    original.resourceLaunchApp_ = L"D:\\Apps\\player.exe";
     original.taskbarPosition_ = 1;
     original.taskbarViewMode_ = TaskbarViewMode::AppBar;
     original.appBarEdge_ = AppBarEdge::Bottom;
@@ -193,6 +199,12 @@ TEST_CASE("app_settings.json_roundtrip_and_legacy_migrations") {
     EXPECT_EQ(loaded.fontFamily_, std::wstring(L"Microsoft YaHei UI"));
     EXPECT_NEAR(loaded.fontSize_, 15.5, 1e-4);
     EXPECT_EQ(loaded.fontStyle_, LyricFontStyle::BoldItalic);
+    EXPECT_EQ(loaded.fontWeight_, 550);
+    EXPECT_FALSE(loaded.embeddedAutoWidth_);
+    EXPECT_EQ(loaded.embeddedMaxWidth_, 640);
+    EXPECT_TRUE(loaded.dockPetVisible_);
+    EXPECT_TRUE(loaded.resourceDoubleClickLaunch_);
+    EXPECT_EQ(loaded.resourceLaunchApp_, std::wstring(L"D:\\Apps\\player.exe"));
     EXPECT_EQ(loaded.taskbarPosition_, 1);
     EXPECT_EQ(loaded.taskbarViewMode_, TaskbarViewMode::AppBar);
     EXPECT_EQ(loaded.appBarEdge_, AppBarEdge::Bottom);
@@ -244,6 +256,42 @@ TEST_CASE("app_settings.json_roundtrip_and_legacy_migrations") {
     EXPECT_FALSE(migrated.fullscreenRenderModeEnabled_);
     EXPECT_EQ(migrated.fullscreenRenderMode_, RenderMode::Stopped);
     EXPECT_EQ(migrated.fullscreenRenderModeMonitorId_, std::wstring(L"all"));
+}
+
+TEST_CASE("app_settings.font_weight_defaults_and_legacy_migration") {
+    // 新配置缺省时落到常规 400，不应改变既有默认外观。
+    AppSettings fresh;
+    EXPECT_EQ(fresh.fontWeight_, kDefaultFontWeight);
+
+    bool migrateLegacyLog = false;
+    nlohmann::json legacyBold = {{"fontStyle", "bold"}};
+    AppSettings boldSettings;
+    boldSettings.readJson(legacyBold, false, migrateLegacyLog);
+    EXPECT_EQ(boldSettings.fontWeight_, 700);
+    EXPECT_EQ(boldSettings.fontStyle_, LyricFontStyle::Bold);
+
+    nlohmann::json legacyItalic = {{"fontStyle", "italic"}};
+    AppSettings italicSettings;
+    italicSettings.readJson(legacyItalic, false, migrateLegacyLog);
+    EXPECT_EQ(italicSettings.fontWeight_, kDefaultFontWeight);
+    EXPECT_EQ(italicSettings.fontStyle_, LyricFontStyle::Italic);
+
+    // 显式字重优先于样式位推导，并钳制到 100-900。
+    nlohmann::json explicitWeight = {{"fontStyle", "bold"}, {"fontWeight", 250}};
+    AppSettings weighted;
+    weighted.readJson(explicitWeight, false, migrateLegacyLog);
+    EXPECT_EQ(weighted.fontWeight_, 250);
+
+    nlohmann::json clamped = {{"fontWeight", 5000}};
+    AppSettings clampedSettings;
+    clampedSettings.readJson(clamped, false, migrateLegacyLog);
+    EXPECT_EQ(clampedSettings.fontWeight_, kMaximumFontWeight);
+
+    // 整体平移保留标题相对正文的强调。
+    EXPECT_EQ(shiftFontWeight(600, 400), 600);
+    EXPECT_EQ(shiftFontWeight(600, 300), 500);
+    EXPECT_EQ(shiftFontWeight(400, 900), 900);
+    EXPECT_EQ(shiftFontWeight(900, 900), kMaximumFontWeight);
 }
 
 TEST_CASE("settings_store.atomic_save_and_error_statuses") {

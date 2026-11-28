@@ -171,6 +171,51 @@ void App::pickIdleApp() {
     }).detach();
 }
 
+void App::pickResourceLaunchApp() {
+    const DWORD mainThreadId = mainThread;
+    runtime_log::writef(L"[action][resource-launch] choose-app start");
+    // 与添加快捷启动应用一致：文件对话框放到独立 STA，避免阻塞主线程消息处理。
+    std::thread([mainThreadId] {
+        std::wstring selectedPath;
+        const HRESULT init =
+            CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (SUCCEEDED(init)) {
+            IFileOpenDialog* dialog = nullptr;
+            if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                           IID_PPV_ARGS(&dialog)))) {
+                const COMDLG_FILTERSPEC filters[] = {{L"应用程序 (*.exe)", L"*.exe"}};
+                DWORD options = 0;
+                if (SUCCEEDED(dialog->GetOptions(&options)))
+                    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+                                       FOS_PATHMUSTEXIST);
+                dialog->SetFileTypes(_countof(filters), filters);
+                dialog->SetTitle(L"选择双击资源监视区域时启动的应用");
+                if (SUCCEEDED(dialog->Show(nullptr))) {
+                    IShellItem* item = nullptr;
+                    if (SUCCEEDED(dialog->GetResult(&item)) && item) {
+                        PWSTR path = nullptr;
+                        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path) {
+                            selectedPath = path;
+                            CoTaskMemFree(path);
+                        }
+                        item->Release();
+                    }
+                }
+                dialog->Release();
+            }
+            CoUninitialize();
+        }
+
+        runtime_log::writef(L"[action][resource-launch] choose-app result=%s path=%s",
+                            selectedPath.empty() ? L"cancelled" : L"selected",
+                            selectedPath.c_str());
+        auto* payload = new IdleAppPayload{std::move(selectedPath)};
+        if (!PostThreadMessageW(mainThreadId, kMsgResourceLaunchAppReady, 0,
+                                reinterpret_cast<LPARAM>(payload)))
+            delete payload;
+    }).detach();
+}
+
 namespace {
 
 bool ruleAlreadyExists(const std::vector<GenericSmtcAppRule>& rules,

@@ -104,6 +104,11 @@ void App::dispatchThreadMessage(const MSG& msg) {
         idleAppPickerOpen_ = false;
         if (payload && !payload->path.empty())
             addIdleApp(payload->path);
+    } else if (msg.message == kMsgResourceLaunchAppReady) {
+        auto payload =
+            std::unique_ptr<IdleAppPayload>(reinterpret_cast<IdleAppPayload*>(msg.lParam));
+        if (payload && !payload->path.empty())
+            onResourceLaunchAppPicked(payload->path);
     } else if (msg.message == kMsgGenericSmtcAppReady) {
         auto payload =
             std::unique_ptr<IdleAppPayload>(reinterpret_cast<IdleAppPayload*>(msg.lParam));

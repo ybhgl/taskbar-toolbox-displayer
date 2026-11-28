@@ -182,6 +182,7 @@ struct FontPickerDialog::Impl {
     int sizeWheelAccum = 0;
     bool scrollDragging = false;
     bool draggingFamily = false;
+    bool draggingWeight = false;
     float scrollDragGrabDy = 0.0f;
 
     int hoverId = 0;
@@ -1151,7 +1152,7 @@ struct FontPickerDialog::Impl {
 
     void applyAndClose() {
         if (onApply)
-            onApply(currentFamily(), currentSize(), currentStyle());
+            onApply(currentFamily(), currentSize(), currentStyle(), currentWeight());
         destroy();
     }
 
@@ -1235,6 +1236,10 @@ struct FontPickerDialog::Impl {
             const float s = surface.dipScale();
             const float x = GET_X_LPARAM(lp) / s;
             const float y = GET_Y_LPARAM(lp) / s;
+            if (draggingWeight) {
+                setWeight(weightAtX(x));
+                return 0;
+            }
             if (scrollDragging) {
                 updateScrollDrag(y);
                 return 0;
@@ -1313,6 +1318,13 @@ struct FontPickerDialog::Impl {
             const float s = surface.dipScale();
             const float x = GET_X_LPARAM(lp) / s;
             const float y = GET_Y_LPARAM(lp) / s;
+            if (draggingWeight) {
+                draggingWeight = false;
+                if (GetCapture() == hwnd)
+                    ReleaseCapture();
+                surface.invalidate();
+                return 0;
+            }
             if (scrollDragging) {
                 scrollDragging = false;
                 if (GetCapture() == hwnd)
@@ -1347,6 +1359,7 @@ struct FontPickerDialog::Impl {
         }
         case WM_CAPTURECHANGED:
             scrollDragging = false;
+            draggingWeight = false;
             pressedId = 0;
             pressedOption = -1;
             surface.invalidate();
@@ -1541,7 +1554,7 @@ struct FontPickerDialog::Impl {
         previewRect = D2D1::RectF(pad, buttonY - gap - previewH, std::max(pad, w - pad),
                                   buttonY - gap);
 
-        const float listTop = styleY + fluent::metrics::controlHeight + gap;
+        const float listTop = weightY + fluent::metrics::controlHeight + gap;
         const float listHeight = std::max(0.0f, previewRect.top - gap - listTop);
         const float listWidth = std::max(0.0f, w - pad * 2.0f - gap);
         const float familyWidth = interfaceFont ? std::max(0.0f, w - pad * 2.0f)
