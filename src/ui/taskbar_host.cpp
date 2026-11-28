@@ -445,6 +445,8 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
     UINT displayRefreshHz_ = 60;
     std::wstring frameDisplayName_;
     bool allowOverlap_ = false;
+    bool embeddedAutoWidth_ = true;
+    int embeddedMaxWidthDip_ = kEmbeddedMaxWidthDefault;
     bool probeReady_ = false;
     TaskbarPlacementStatus placementStatus_ = TaskbarPlacementStatus::Unavailable;
     std::function<void(TaskbarPlacementStatus)> onPlacementStatusChanged_;
@@ -1506,8 +1508,27 @@ struct TaskbarHost::Impl : std::enable_shared_from_this<TaskbarHost::Impl> {
             compressedMinWidthDip = flexibleMinDip * kCompressedMinWidthRatio + compactLeftDip;
             maxWidthDip = maxWidthDip * (1.0f - kLeftRatio) + compactLeftDip;
         }
-        int minW = (int)std::lround(minWidthDip * scale());
-        int compressedMinW = (int)std::lround(compressedMinWidthDip * scale());
+        // 内嵌内容长度：自动跟随任务栏最大空白区，手动使用用户上限；
+        // 放置时仍会按实际空白区裁切，因此内容不会覆盖任务栏图标。
+        if (!vertical && !embeddedResourceOnly()) {
+            if (embeddedAutoWidth_) {
+                taskbar_detail::PlacementInput probe{};
+                probe.taskbar = rcTaskbar_;
+                probe.edge = taskbarEdge_;
+                probe.vertical = false;
+                probe.gap = gap;
+                probe.crossPixels = crossPx;
+                probe.occupied = occupied;
+                const int span = taskbar_detail::largestFreeSpanMajor(probe);
+                if (span > 0)
+                    maxWidthDip = dip(span);
+            } else {
+                maxWidthDip =
+                    static_cast<float>(clampEmbeddedMaxWidth(embeddedMaxWidthDip_));
+            }
+            maxWidthDip = std::max(maxWidthDip, minWidthDip);
+        }
+        int minW = (int)std::lround(minWidthDip * scale());        int compressedMinW = (int)std::lround(compressedMinWidthDip * scale());
         int maxW = (int)std::lround(maxWidthDip * scale());
         // 独立频谱和内嵌资源区整体加宽；背景波浪复用内容区。
         const float spectrumExtra = spectrumExtraForScene(scene_);

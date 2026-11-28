@@ -163,6 +163,14 @@ void SettingsSections::updateImmersiveRowsEnabled() {
                 : L"仅内嵌模式生效。按下方已勾选的监控项顺序显示，多页可用滚轮切换。";
         row->showHint = true;
     }
+    if (auto* row = findRow(kIdEmbeddedAutoWidth)) {
+        row->checked = state.embeddedAutoWidth;
+        row->enabled = embeddedResources;
+    }
+    if (auto* row = findRow(kIdEmbeddedMaxWidth)) {
+        row->value = clampEmbeddedMaxWidth(state.embeddedMaxWidth);
+        row->enabled = embeddedResources && !state.embeddedAutoWidth;
+    }
     if (auto* row = findRow(kIdDockResourcePlacement))
         row->enabled = embeddedResources && state.embeddedResourceMonitor && anyResourceMetric;
     syncResourceMetricsRow(resourceExtrasEnabled, appBarEnabled);
@@ -393,6 +401,10 @@ void SettingsSections::syncTaskbarModeRows(const SettingsState& s) {
         row->selected = std::clamp(s.appBarEdge, 0, 1);
     if (auto* row = findRow(kIdImmersiveBackgroundAdjustment))
         row->selected = std::clamp(s.immersiveBackgroundAdjustment, 0, 1);
+    if (auto* row = findRow(kIdEmbeddedAutoWidth))
+        row->checked = s.embeddedAutoWidth;
+    if (auto* row = findRow(kIdEmbeddedMaxWidth))
+        row->value = clampEmbeddedMaxWidth(s.embeddedMaxWidth);
     if (auto* row = findRow(kIdDockBackgroundAdjustment))
         row->selected = std::clamp(s.dockBackgroundAdjustment, 0, 1);
     if (auto* row = findRow(kIdImmersiveBackgroundBlur))

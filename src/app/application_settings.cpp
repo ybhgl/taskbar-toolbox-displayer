@@ -328,6 +328,53 @@ void App::applyEmbeddedResourceMonitor(bool on) {
     saveSettings();
 }
 
+void App::applyEmbeddedWidthPolicy(bool autoWidth, int maxWidthDip) {
+    settings_.embeddedAutoWidth_ = autoWidth;
+    settings_.embeddedMaxWidth_ = clampEmbeddedMaxWidth(maxWidthDip);
+    forEachHost([&](TaskbarHost* host) {
+        host->setEmbeddedWidthPolicy(settings_.embeddedAutoWidth_, settings_.embeddedMaxWidth_);
+    });
+    logSettingBool(L"embedded-auto-width", settings_.embeddedAutoWidth_);
+    logSettingInt(L"embedded-max-width", settings_.embeddedMaxWidth_);
+    refreshSettingsDialog(true);
+    saveSettings();
+}
+
+void App::applyDockPetVisible(bool on) {
+    settings_.dockPetVisible_ = on;
+    // 桌宠同时存在于 Dock/沉浸任务栏与媒体卡片，走完整外观下发。
+    publishTaskbarAppearance();
+    logSettingBool(L"dock-pet-visible", on);
+    refreshSettingsDialog(true);
+    saveSettings();
+}
+
+void App::pushResourceLaunchTarget() {
+    const bool enabled =
+        settings_.resourceDoubleClickLaunch_ && !settings_.resourceLaunchApp_.empty();
+    forEachHost([&](TaskbarHost* host) {
+        host->setResourceLaunchTarget(enabled, settings_.resourceLaunchApp_);
+    });
+}
+
+void App::applyResourceDoubleClickLaunch(bool on) {
+    settings_.resourceDoubleClickLaunch_ = on;
+    pushResourceLaunchTarget();
+    logSettingBool(L"resource-double-click-launch", on);
+    refreshSettingsDialog(true);
+    saveSettings();
+}
+
+void App::onResourceLaunchAppPicked(const std::wstring& path) {
+    if (path.empty())
+        return;
+    settings_.resourceLaunchApp_ = path;
+    pushResourceLaunchTarget();
+    runtime_log::writef(L"[action][resource-launch] app=%s", path.c_str());
+    refreshSettingsDialog(true);
+    saveSettings();
+}
+
 void App::applyDockResourceCpuUsage(bool on) {
     const auto displays = enumerateTaskbarDisplays();
     const std::wstring targetId = resolveEditingMonitorDeviceName(displays);
@@ -1514,6 +1561,22 @@ SettingsState App::currentSettingsState() const {
     st.backgroundBlurSupported = editingHost ? editingHost->backgroundBlurAvailable()
                                              : (!taskbarHost || taskbarHost->backgroundBlurAvailable());
     st.embeddedResourceMonitor = editingProfile.embeddedResourceMonitor;
+    st.embeddedAutoWidth = settings_.embeddedAutoWidth_;
+    st.embeddedMaxWidth = settings_.embeddedMaxWidth_;
+    st.dockPetVisible = settings_.dockPetVisible_;
+    st.resourceDoubleClickLaunch = settings_.resourceDoubleClickLaunch_;
+    if (!settings_.resourceLaunchApp_.empty()) {
+        const size_t slash = settings_.resourceLaunchApp_.find_last_of(L"\\/");
+        st.resourceLaunchAppName = slash == std::wstring::npos
+                                       ? settings_.resourceLaunchApp_
+                                       : settings_.resourceLaunchApp_.substr(slash + 1);
+    }
+    st.resourceMonitorActive =
+        std::any_of(settings_.monitorTaskbarSettings_.begin(),
+                    settings_.monitorTaskbarSettings_.end(),
+                    [](const MonitorTaskbarSettings& profile) {
+                        return profile.embeddedResourceMonitor && profile.hasAnyResourceMetric();
+                    });
     st.dockResourceCpuUsage = editingProfile.dockResourceCpuUsage;
     st.dockResourceMemoryUsage = editingProfile.dockResourceMemoryUsage;
     st.dockResourceGpuUsage = editingProfile.dockResourceGpuUsage;
@@ -1663,6 +1726,15 @@ SettingsActions App::buildSettingsActions() {
     };
     act.onDockBackgroundAdjustment = [this](int mode) { applyDockBackgroundAdjustment(mode); };
     act.onEmbeddedResourceMonitor = [this](bool on) { applyEmbeddedResourceMonitor(on); };
+    act.onEmbeddedAutoWidth = [this](bool on) {
+        applyEmbeddedWidthPolicy(on, settings_.embeddedMaxWidth_);
+    };
+    act.onEmbeddedMaxWidth = [this](int value) {
+        applyEmbeddedWidthPolicy(settings_.embeddedAutoWidth_, value);
+    };
+    act.onDockPetVisible = [this](bool on) { applyDockPetVisible(on); };
+    act.onResourceDoubleClickLaunch = [this](bool on) { applyResourceDoubleClickLaunch(on); };
+    act.onPickResourceLaunchApp = [this] { pickResourceLaunchApp(); };
     act.onDockResourceCpuUsage = [this](bool on) { applyDockResourceCpuUsage(on); };
     act.onDockResourceMemoryUsage = [this](bool on) { applyDockResourceMemoryUsage(on); };
     act.onDockResourceGpuUsage = [this](bool on) { applyDockResourceGpuUsage(on); };

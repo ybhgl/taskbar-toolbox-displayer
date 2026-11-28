@@ -160,8 +160,14 @@ std::vector<std::pair<int, int>> occupiedIntervals(const OccupiedRegions& input)
     return merged;
 }
 
-int previewMajorPixels(const WindowPlacement& anchor, bool vertical, int desiredMajor) {
-    const int anchorMajor = anchor.availableMajor > 0 ? anchor.availableMajor
+int largestFreeSpanMajor(const PlacementInput& input) {
+    int best = 0;
+    for (const Span& span : freeSpans(input))
+        best = std::max(best, usableMajor(span, input.gap));
+    return best;
+}
+
+int previewMajorPixels(const WindowPlacement& anchor, bool vertical, int desiredMajor) {    const int anchorMajor = anchor.availableMajor > 0 ? anchor.availableMajor
                                                       : (vertical ? anchor.height : anchor.width);
     const int currentMajor =
         desiredMajor > 0 ? desiredMajor : (vertical ? anchor.height : anchor.width);

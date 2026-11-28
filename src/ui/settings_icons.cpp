@@ -389,6 +389,21 @@ void draw(ID2D1RenderTarget* target, Kind kind, const D2D1_RECT_F& bounds, ID2D1
         c.line(10.0f, 13.0f, 7.5f, 10.5f);
         c.line(10.0f, 13.0f, 12.5f, 10.5f);
         break;
+    case Kind::Width:
+        c.line(4.0f, 4.0f, 4.0f, 16.0f, 0.9f);
+        c.line(16.0f, 4.0f, 16.0f, 16.0f, 0.9f);
+        c.line(4.0f, 10.0f, 16.0f, 10.0f);
+        c.line(4.0f, 10.0f, 7.0f, 7.5f);
+        c.line(4.0f, 10.0f, 7.0f, 12.5f);
+        c.line(16.0f, 10.0f, 13.0f, 7.5f);
+        c.line(16.0f, 10.0f, 13.0f, 12.5f);
+        break;
+    case Kind::Pet:
+        c.fillEllipse(4.6f, 4.4f, 7.0f, 7.6f);
+        c.fillEllipse(8.3f, 3.4f, 10.7f, 6.6f);
+        c.fillEllipse(12.1f, 4.4f, 14.5f, 7.6f);
+        c.fillEllipse(6.2f, 8.6f, 13.8f, 16.0f);
+        break;
     case Kind::DoubleLine:
         c.line(3.0f, 6.0f, 10.0f, 6.0f);
         c.line(3.0f, 9.0f, 17.0f, 9.0f);

@@ -425,6 +425,18 @@ void SettingsSections::onCommand(int id, int option) {
         if (actions.onDockBackgroundBlur)
             actions.onDockBackgroundBlur(row->value);
         break;
+    case kIdEmbeddedAutoWidth:
+        row->checked = !row->checked;
+        state.embeddedAutoWidth = row->checked;
+        updateImmersiveRowsEnabled();
+        if (actions.onEmbeddedAutoWidth)
+            actions.onEmbeddedAutoWidth(row->checked);
+        break;
+    case kIdEmbeddedMaxWidth:
+        state.embeddedMaxWidth = clampEmbeddedMaxWidth(row->value);
+        if (actions.onEmbeddedMaxWidth)
+            actions.onEmbeddedMaxWidth(state.embeddedMaxWidth);
+        break;
     case kIdEmbeddedResourceMonitor:
         row->checked = !row->checked;
         state.embeddedResourceMonitor = row->checked;

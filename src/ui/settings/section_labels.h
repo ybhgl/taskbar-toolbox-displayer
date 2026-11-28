@@ -102,6 +102,15 @@ inline settings_icon::Kind iconForRow(int id) {
     case kIdAppBarEdge:
     case kIdDockResourcePlacement:
         return settings_icon::Kind::Position;
+    case kIdEmbeddedAutoWidth:
+    case kIdEmbeddedMaxWidth:
+        return settings_icon::Kind::Width;
+    case kIdDockPetVisible:
+        return settings_icon::Kind::Pet;
+    case kIdResourceDoubleClickLaunch:
+        return settings_icon::Kind::QuickLaunch;
+    case kIdResourceLaunchApp:
+        return settings_icon::Kind::Apps;
     case kIdImmersiveBackgroundBlur:
     case kIdDockBackgroundBlur:
     case kIdImmersiveBackgroundAdjustment:

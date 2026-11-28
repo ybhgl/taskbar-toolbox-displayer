@@ -120,6 +120,22 @@ void SettingsSections::createTaskbarModeRows() {
     addRadio(kTaskbarModePage, kIdAppBarEdge, L"Dock 位置", nullptr,
              {L"顶部", L"底部"}, std::clamp(state.appBarEdge, 0, 1),
              monitorActive && state.taskbarViewMode == 2, kRowH);
+    addHeader(kTaskbarModePage, L"内嵌内容长度");
+    Row& autoWidth = addToggle(kTaskbarModePage, kIdEmbeddedAutoWidth, L"自动识别可用空间",
+                               state.embeddedAutoWidth);
+    autoWidth.hint =
+        L"自动检测任务栏中最大的空白区域并在其中显示；图标增减或空间变化时实时跟随。";
+    autoWidth.showHint = true;
+    autoWidth.enabled = monitorActive && state.taskbarViewMode == 0;
+    autoWidth.minHeight = autoWidth.height = kRowTallH;
+    Row& maxWidthRow = addSlider(
+        kTaskbarModePage, kIdEmbeddedMaxWidth, L"最大长度", state.embeddedMaxWidth,
+        monitorActive && state.taskbarViewMode == 0 && !state.embeddedAutoWidth,
+        L"关闭自动识别后生效；实际宽度仍受任务栏可用空白区限制，不会覆盖图标。", kRowTallH);
+    maxWidthRow.minValue = kEmbeddedMaxWidthMinimum;
+    maxWidthRow.maxValue = kEmbeddedMaxWidthMaximum;
+    maxWidthRow.value = clampEmbeddedMaxWidth(state.embeddedMaxWidth);
+    maxWidthRow.valueSuffix = L"px";
     addHeader(kTaskbarModePage, L"沉浸模式背景");
     addRadio(kTaskbarModePage, kIdImmersiveBackgroundAdjustment, L"调整方式", nullptr,
              {L"模糊程度", L"不透明度"}, std::clamp(state.immersiveBackgroundAdjustment, 0, 1),

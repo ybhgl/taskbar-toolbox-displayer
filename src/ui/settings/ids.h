@@ -115,6 +115,14 @@ inline constexpr int kIdDockResourcePlacement = 491;
 inline constexpr int kIdDockResourceHideLabels = 492;
 inline constexpr int kIdImmersiveBackgroundAdjustment = 479;
 inline constexpr int kIdDockBackgroundAdjustment = 480;
+// 内嵌模式内容长度：自动跟随可用空间 / 手动最大长度。
+inline constexpr int kIdEmbeddedAutoWidth = 533;
+inline constexpr int kIdEmbeddedMaxWidth = 534;
+// 桌宠显示开关。
+inline constexpr int kIdDockPetVisible = 535;
+// 双击资源监视区域启动指定应用。
+inline constexpr int kIdResourceDoubleClickLaunch = 536;
+inline constexpr int kIdResourceLaunchApp = 537;
 inline constexpr int kIdContentScrollBar = 401;
 inline constexpr int kIdIdleAppNames = 460;
 inline constexpr int kIdleAppNamesOption = -2;

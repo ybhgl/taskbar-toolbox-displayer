@@ -93,6 +93,9 @@ struct AppSettings {
     int immersiveBackgroundAdjustment_ = 0;
     int dockBackgroundAdjustment_ = 0;
     bool embeddedResourceMonitor_ = false;
+    // 内嵌模式内容长度：自动取任务栏最大空白区；关闭后使用 embeddedMaxWidth_（DIP）。
+    bool embeddedAutoWidth_ = true;
+    int embeddedMaxWidth_ = kEmbeddedMaxWidthDefault;
     bool dockResourceCpuUsage_ = true;
     bool dockResourceMemoryUsage_ = true;
     bool dockResourceGpuUsage_ = false;

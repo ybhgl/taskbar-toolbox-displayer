@@ -442,6 +442,13 @@ private:
     void applyDockResourceVisibility();
 
     void applyEmbeddedResourceMonitor(bool on);
+    // 内嵌内容长度策略：自动跟随任务栏最大空白区，或使用用户设定的最大长度。
+    void applyEmbeddedWidthPolicy(bool autoWidth, int maxWidthDip);
+    void applyDockPetVisible(bool on);
+    void applyResourceDoubleClickLaunch(bool on);
+    void onResourceLaunchAppPicked(const std::wstring& path);
+    void pushResourceLaunchTarget();
+    void pickResourceLaunchApp();
 
     void applyDockResourceCpuUsage(bool on);
 

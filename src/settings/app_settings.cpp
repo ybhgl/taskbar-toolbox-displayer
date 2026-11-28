@@ -488,6 +488,9 @@ void AppSettings::readJson(const nlohmann::json& j, bool hasTickTickToken,
     immersiveBackgroundAdjustment_ = std::clamp(j.value("immersiveBackgroundAdjustment", 0), 0, 1);
     dockBackgroundAdjustment_ = std::clamp(j.value("dockBackgroundAdjustment", 0), 0, 1);
     embeddedResourceMonitor_ = j.value("embeddedResourceMonitor", false);
+    embeddedAutoWidth_ = j.value("embeddedAutoWidth", true);
+    embeddedMaxWidth_ =
+        clampEmbeddedMaxWidth(j.value("embeddedMaxWidth", kEmbeddedMaxWidthDefault));
     dockResourceSmallFont_ = j.value("dockResourceSmallFont", false);
     dockResourceHideLabels_ = j.value("dockResourceHideLabels", false);
     dockResourcePlacement_ =
@@ -841,6 +844,8 @@ nlohmann::json AppSettings::toJson() const {
     j.erase("dockMaskOpacity");
     j.erase("dockBackgroundBlur");
     j["embeddedResourceMonitor"] = embeddedResourceMonitor_;
+    j["embeddedAutoWidth"] = embeddedAutoWidth_;
+    j["embeddedMaxWidth"] = clampEmbeddedMaxWidth(embeddedMaxWidth_);
     j["dockResourceSmallFont"] = dockResourceSmallFont_;
     j["dockResourceHideLabels"] = dockResourceHideLabels_;
     j["dockResourcePlacement"] = dockResourcePlacement_ == ResourcePlacement::Start ? 0 : 1;

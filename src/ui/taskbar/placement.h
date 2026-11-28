@@ -52,6 +52,8 @@ struct TaskbarAnchorSlot {
     bool spanHasBothEdges = false;
 };
 std::vector<std::pair<int, int>> occupiedIntervals(const OccupiedRegions& input);
+// 最大空白区扣除两端 gap 后的可用主轴长度；无可用空白区时返回 0。
+int largestFreeSpanMajor(const PlacementInput& input);
 TaskbarPlacementStatus calculatePlacement(const PlacementInput& input, WindowPlacement& placement);
 WindowPlacement dragPreview(const WindowPlacement& anchor, TaskbarAnchorEdge edge, bool vertical,
                             int desiredMajor);

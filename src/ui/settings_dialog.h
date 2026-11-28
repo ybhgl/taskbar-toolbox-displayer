@@ -170,6 +170,11 @@ struct SettingsActions {
     std::function<void(int)> onImmersiveBackgroundAdjustment;
     std::function<void(int)> onDockBackgroundAdjustment;
     std::function<void(bool)> onEmbeddedResourceMonitor;
+    std::function<void(bool)> onEmbeddedAutoWidth;
+    std::function<void(int)> onEmbeddedMaxWidth;
+    std::function<void(bool)> onDockPetVisible;
+    std::function<void(bool)> onResourceDoubleClickLaunch;
+    std::function<void()> onPickResourceLaunchApp;
     std::function<void(bool)> onDockResourceCpuUsage;
     std::function<void(bool)> onDockResourceMemoryUsage;
     std::function<void(bool)> onDockResourceGpuUsage;
